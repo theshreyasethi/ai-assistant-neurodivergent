@@ -7,19 +7,26 @@ import io
 import json
 import re
 import spacy
+import traceback
 from firebase_config import db, verify_firebase_token
 import random
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
-from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_classic.chains import ConversationChain
-from langchain_classic.memory import ConversationBufferMemory
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from cachetools import TTLCache
 import threading
 from starlette.concurrency import run_in_threadpool
 from ingestion import ingest, retrieve
 from datetime import datetime, timezone
 from models.schemas import TurnSentiment, ChatbotResponse, QuizResultLog, SessionTelemetryLog, CreateUserRequest
+
+# ── Startup key presence guard ───────────────────────────────────────────────
+if not GOOGLE_API_KEY or len(GOOGLE_API_KEY.strip()) < 10:
+    raise RuntimeError(
+        "[STARTUP] GOOGLE_API_KEY is missing or too short. "
+        "Set a valid key in backend/.env and restart the server."
+    )
+print(f"[STARTUP] GOOGLE_API_KEY loaded OK (prefix: {GOOGLE_API_KEY[:6]}...)")
 
 app = FastAPI()
 nlp = spacy.load("en_core_web_sm")
@@ -353,21 +360,16 @@ def _simplify_via_llm(
     return content.strip()
 
 
-_session_cache: TTLCache[str, ConversationChain] = TTLCache(maxsize=256, ttl=3600)
-_cache_lock = threading.Lock()
+_chat_history: TTLCache[str, list] = TTLCache(maxsize=256, ttl=3600)
+_history_lock = threading.Lock()
 
-
-def _get_chain(session_id: str) -> ConversationChain:
-    with _cache_lock:
-        chain = _session_cache.get(session_id)
-        if chain is None:
-            chain = ConversationChain(
-                llm=llm,
-                verbose=True,
-                memory=ConversationBufferMemory(),
-            )
-            _session_cache[session_id] = chain
-        return chain
+_CHATBOT_SYSTEM = (
+    "You are EduEase Assistant, a friendly and knowledgeable AI tutor for students. "
+    "You help students understand their reading material AND answer any question they ask — "
+    "including general knowledge topics such as geography, science, history, mathematics, "
+    "literature, and more. Always be encouraging, accurate, and give clear, concise answers "
+    "that are easy for students to understand."
+)
 
 @app.get("/")
 def read_root():
@@ -584,32 +586,49 @@ async def chatbot(
     context = "\n\n".join(doc.page_content for doc in context_docs) if context_docs else ""
     prompt = f"Context:\n{context}\n\nQuestion: {sanitized_text}" if context else sanitized_text
 
+    # Build message list: system prompt + rolling conversation history + new turn
+    with _history_lock:
+        prior = list(_chat_history.get(session_id, []))
+
+    messages: list = [SystemMessage(content=_CHATBOT_SYSTEM)]
+    for turn in prior[-6:]:  # keep last 3 exchanges for context
+        messages.append(HumanMessage(content=turn["human"]))
+        messages.append(AIMessage(content=turn["ai"]))
+    messages.append(HumanMessage(content=prompt))
+
     try:
-        chain = _get_chain(session_id)
-        llm_response = await run_in_threadpool(chain.predict, input=prompt)
+        result = await run_in_threadpool(llm.invoke, messages)
+        llm_response = result.content
+
+        # Persist this exchange in session history
+        with _history_lock:
+            updated = list(_chat_history.get(session_id, []))
+            updated.append({"human": sanitized_text, "ai": llm_response})
+            _chat_history[session_id] = updated
+
     except Exception as chat_err:
         err_str = str(chat_err)
-        print(f"[CHATBOT ERROR] chain.predict failed: {err_str[:200]}")
-        is_rate_limit = "429" in err_str or "quota" in err_str.lower() or "rate" in err_str.lower()
+        is_rate_limit = (
+            "429" in err_str
+            or "resource_exhausted" in err_str.lower()
+            or "quota" in err_str.lower()
+        )
         if is_rate_limit:
+            print("--- [CHATBOT] GEMINI API RATE LIMIT TRIGGERED ---")
+            print(f"[CHATBOT QUOTA] {err_str[:200]}")
+            print("-------------------------------------------------")
             return ChatbotResponse(
-                response="I'm currently experiencing high demand. Please wait a moment and try again.",
+                response=(
+                    "The assistant is temporarily at maximum capacity under Google's free-tier quota. "
+                    "Please wait 60 seconds and try again — your reading session is still active."
+                ),
                 sentiment=_DEFAULT_SENTIMENT,
             )
-        try:
-            direct_result = await run_in_threadpool(llm.invoke, [HumanMessage(content=prompt)])
-            llm_response = direct_result.content
-        except Exception as direct_err:
-            print(f"[CHATBOT ERROR] direct LLM also failed: {str(direct_err)[:200]}")
-            if "429" in str(direct_err) or "quota" in str(direct_err).lower():
-                return ChatbotResponse(
-                    response="I'm currently experiencing high demand. Please wait a moment and try again.",
-                    sentiment=_DEFAULT_SENTIMENT,
-                )
-            return ChatbotResponse(
-                response=SAFE_FALLBACK,
-                sentiment=_DEFAULT_SENTIMENT,
-            )
+        print("--- CHATBOT CRITICAL ERROR TRACEBACK ---")
+        traceback.print_exc()
+        print(f"[CHATBOT ERROR] llm.invoke failed: {err_str[:300]}")
+        print("----------------------------------------")
+        return ChatbotResponse(response=SAFE_FALLBACK, sentiment=_DEFAULT_SENTIMENT)
 
     if not isinstance(llm_response, str) or not llm_response.strip():
         return ChatbotResponse(
