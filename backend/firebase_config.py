@@ -1,12 +1,31 @@
-
 import os
+import json
 import firebase_admin
 from firebase_admin import credentials, firestore
 from google.oauth2 import id_token as google_id_token
 from google.auth.transport import requests as google_requests
 
-cred = credentials.Certificate("serviceAccountKey.json")
-firebase_admin.initialize_app(cred)
+if not firebase_admin._apps:
+    firebase_key_json = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON")
+
+    if firebase_key_json:
+        try:
+            cred_dict = json.loads(firebase_key_json)
+            cred = credentials.Certificate(cred_dict)
+            firebase_admin.initialize_app(cred)
+            print("[STARTUP] Firebase initialized successfully via Environment Variable.")
+        except Exception as e:
+            print(f"[STARTUP] Failed to parse FIREBASE_SERVICE_ACCOUNT_JSON: {e}")
+            raise
+    elif os.path.exists("serviceAccountKey.json"):
+        cred = credentials.Certificate("serviceAccountKey.json")
+        firebase_admin.initialize_app(cred)
+        print("[STARTUP] Firebase initialized successfully via local serviceAccountKey.json.")
+    else:
+        raise RuntimeError(
+            "[STARTUP] Critical Error: No Firebase credentials found. "
+            "Set FIREBASE_SERVICE_ACCOUNT_JSON env var or add serviceAccountKey.json."
+        )
 
 db = firestore.client()
 
