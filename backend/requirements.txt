@@ -5,7 +5,6 @@ python-multipart
 spacy
 beautifulsoup4
 requests
-argostranslate
 PyPDF2
 pypdf
 google-cloud-firestore
@@ -16,6 +15,5 @@ google-ai-generativelanguage==0.9.0
 firebase-admin
 cachetools
 faiss-cpu
-sentence-transformers
 langchain-community
 langchain-text-splitters

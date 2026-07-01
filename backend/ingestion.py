@@ -8,7 +8,6 @@ from langchain_community.vectorstores import FAISS
 from langchain_core.stores import InMemoryByteStore
 from langchain_core.documents import Document
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
-from sentence_transformers import CrossEncoder
 
 from config import GOOGLE_API_KEY
 
@@ -36,18 +35,6 @@ _store = InMemoryByteStore()
 _vectorstore: FAISS | None = None
 _retriever: ParentDocumentRetriever | None = None
 
-_reranker: CrossEncoder | None = None
-_reranker_lock = threading.Lock()
-
-
-def _get_reranker() -> CrossEncoder:
-    global _reranker
-    if _reranker is not None:
-        return _reranker
-    with _reranker_lock:
-        if _reranker is None:
-            _reranker = CrossEncoder("BAAI/bge-reranker-base")
-        return _reranker
 
 
 def _load_or_create_vectorstore() -> FAISS:
@@ -100,14 +87,6 @@ def ingest(
         return len(parent_docs)
 
 
-def _rerank(query: str, docs: list[Document], top_k: int) -> list[Document]:
-    if not docs:
-        return docs
-    reranker = _get_reranker()
-    pairs = [(query, doc.page_content) for doc in docs]
-    scores = reranker.predict(pairs)
-    ranked = sorted(zip(scores, docs), key=lambda x: x[0], reverse=True)
-    return [doc for _, doc in ranked[:top_k]]
 
 
 def _metadata_filter(
@@ -141,4 +120,4 @@ def retrieve(
         retriever.search_kwargs = {"k": 12}
         candidates = retriever.invoke(query)
     candidates = _metadata_filter(candidates, grade_level, reading_difficulty)
-    return _rerank(query, candidates, k)
+    return candidates[:k]
