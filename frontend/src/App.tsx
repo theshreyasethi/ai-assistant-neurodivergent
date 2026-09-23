@@ -1,7 +1,6 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import LoginPage from './pages/LoginPage';
-import RegisterPage from './pages/RegisterPage';
 import DashboardPage from './pages/DashboardPage';
 import TeacherDashboardPage from './pages/TeacherDashboardPage';
 import AdminDashboardPage from './pages/AdminDashboardPage';
@@ -21,7 +20,10 @@ const App: React.FC = () => {
       <Layout>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
+          {/* Public self-registration is closed — accounts are admin-provisioned only
+              (see docs/PROJECT_EXPLANATION.md and the patent-readiness audit, finding A03).
+              Anyone hitting the old /register link lands safely on /login. */}
+          <Route path="/register" element={<Navigate to="/login" replace />} />
           <Route path="/" element={<LoginPage />} />
 
           {/* Admin */}
@@ -93,6 +95,9 @@ const App: React.FC = () => {
               </RoleGate>
             }
           />
+
+          {/* Unknown path -> login, rather than a blank screen. */}
+          <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </Layout>
     </Router>
