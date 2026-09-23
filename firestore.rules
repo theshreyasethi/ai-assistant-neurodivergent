@@ -1,0 +1,62 @@
+rules_version = '2';
+
+// EduEase Firestore security rules.
+//
+// Context (see docs/PROJECT_EXPLANATION.md and the patent-readiness audit,
+// finding A03): before this file existed, no rules were tracked in the repo
+// at all, which meant nothing on the server side stopped a signed-in client
+// from writing `role: "admin"` (or `teacherId`, or `status`) onto its own
+// `users/{uid}` document via the Firebase client SDK — self-registration
+// plus an unprotected profile write is a full privilege-escalation path.
+//
+// Default posture: deny everything. Every collection the backend (Admin SDK,
+// which bypasses these rules entirely) uses for persistence is listed
+// explicitly below as client-inaccessible, so a future collection someone
+// adds without updating this file is denied by the catch-all, not silently
+// left open.
+//
+// The ONLY collection the frontend talks to directly today is `users/{uid}`
+// (see frontend/src/hooks/useProfile.ts, RoleGate.tsx — both getDoc-only —
+// and useProfile.ts's two updateDoc calls, which only ever touch the
+// `profile` field). That is deliberately the one exception below, and even
+// there a client may read only its own document (or, for a teacher, a
+// student mapped to them) and may write only to `profile`, `displayName`
+// and `consent` — never `role`, `teacherId`, or `status`.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function myDoc()    { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
+    function isAdmin()  { return signedIn() && myDoc().role == 'admin'; }
+    function isOwner(uid) { return signedIn() && request.auth.uid == uid; }
+
+    match /users/{uid} {
+      // Read: the user themself, their mapped teacher, or an admin.
+      allow read: if isOwner(uid) || isAdmin() ||
+        (signedIn() && resource.data.teacherId == request.auth.uid);
+
+      // Update: signed in as the owner, and the write touches ONLY these
+      // fields. role / teacherId / status / email are never writable by a
+      // client — those are admin-provisioning concerns (backend
+      // /admin/create-user, using the Admin SDK, which is not bound by
+      // these rules).
+      allow update: if isOwner(uid) &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['profile', 'displayName', 'consent']);
+
+      // Accounts are created and deleted only by the backend's Admin SDK.
+      allow create, delete: if false;
+    }
+
+    // Everything else is written and read exclusively by the FastAPI
+    // backend via the Admin SDK (which is not subject to these rules), so
+    // it is explicitly denied to every client — including:
+    //   content, quiz_results, telemetry_sessions, sessions,
+    //   sessions/{id}/events, evaluations, recommendation_cache,
+    //   simplify_cache, quiz_cache, visual_summary_cache
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
