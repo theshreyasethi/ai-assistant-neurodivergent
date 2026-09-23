@@ -1,43 +1,47 @@
-import os
 import json
+import os
+
 import firebase_admin
 from firebase_admin import credentials, firestore
-from google.oauth2 import id_token as google_id_token
 from google.auth.transport import requests as google_requests
+from google.oauth2 import id_token as google_id_token
 
-if not firebase_admin._apps:
-    firebase_key_json = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON")
+from config import FIREBASE_CREDENTIALS, FIREBASE_PROJECT_ID
 
-    if firebase_key_json:
-        try:
-            cred_dict = json.loads(firebase_key_json)
-            cred = credentials.Certificate(cred_dict)
-            firebase_admin.initialize_app(cred)
-            print("[STARTUP] Firebase initialized successfully via Environment Variable.")
-        except Exception as e:
-            print(f"[STARTUP] Failed to parse FIREBASE_SERVICE_ACCOUNT_JSON: {e}")
-            raise
-    elif os.path.exists("serviceAccountKey.json"):
-        cred = credentials.Certificate("serviceAccountKey.json")
+db = None
+
+try:
+    if not firebase_admin._apps:
+        # Hosted deploys (Render) supply the service account as an env var;
+        # local dev uses the serviceAccountKey.json file.
+        firebase_key_json = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON")
+        if firebase_key_json:
+            cred = credentials.Certificate(json.loads(firebase_key_json))
+            print("[firebase] Initialized via FIREBASE_SERVICE_ACCOUNT_JSON.")
+        else:
+            cred = credentials.Certificate(str(FIREBASE_CREDENTIALS))
+            print(f"[firebase] Initialized via {FIREBASE_CREDENTIALS.name}.")
         firebase_admin.initialize_app(cred)
-        print("[STARTUP] Firebase initialized successfully via local serviceAccountKey.json.")
-    else:
-        raise RuntimeError(
-            "[STARTUP] Critical Error: No Firebase credentials found. "
-            "Set FIREBASE_SERVICE_ACCOUNT_JSON env var or add serviceAccountKey.json."
-        )
+    db = firestore.client()
+except Exception as exc:  # noqa: BLE001
+    # Firestore being unavailable must not take the whole API down: pure
+    # LLM-pipeline endpoints (simplify / quiz / chatbot) work fine without it,
+    # and telemetry/persistence degrades to a clear 503 rather than crashing
+    # the process on import.
+    print(f"[firebase] Firestore unavailable, persistence disabled: {exc}")
 
-db = firestore.client()
-
-# The Firebase project the frontend uses for auth. May differ from the service
-# account project — tokens are verified via Google's public keys, not the SA key.
-_FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "eduease-b955c")
 _google_request = google_requests.Request()
 
 
 def verify_firebase_token(id_token_str: str) -> dict:
     """Verify a Firebase ID token using Google's public signing keys.
-    Works regardless of which project the service account key belongs to."""
+
+    Deliberately independent of the service-account credential above — this
+    works against FIREBASE_PROJECT_ID regardless of which project
+    serviceAccountKey.json belongs to, so a mismatch between the two (as this
+    project actually had — see BRANCH_COMPARISON.md §8) fails loudly with an
+    auth error instead of silently authenticating against the wrong project.
+    """
     return google_id_token.verify_firebase_token(
-        id_token_str, _google_request, audience=_FIREBASE_PROJECT_ID
+        id_token_str, _google_request, audience=FIREBASE_PROJECT_ID
     )
