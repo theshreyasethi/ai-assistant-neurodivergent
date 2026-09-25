@@ -20,3 +20,7 @@ faiss-cpu
 langchain-community
 langchain-text-splitters
 groq
+
+# dev/test only
+pytest
+httpx
