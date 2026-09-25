@@ -51,6 +51,15 @@ class FakeDocRef:
         else:
             coll[self._doc_id] = dict(data)
 
+    def update(self, data: dict) -> None:
+        """Firestore's partial-update — distinct from .set(): merges into an
+        EXISTING document and raises if it doesn't exist, rather than
+        silently creating one (that's what .set() is for)."""
+        coll = self._store.setdefault(self._collection, {})
+        if self._doc_id not in coll:
+            raise KeyError(f"No document to update at {self._collection}/{self._doc_id}")
+        coll[self._doc_id] = {**coll[self._doc_id], **data}
+
 
 class FakeQuery:
     def __init__(self, store: Dict[str, Dict[str, dict]], collection: str, filters: List[Tuple[str, Any]]):
@@ -150,6 +159,11 @@ class FakeAuth:
         self._by_email: Dict[str, FakeAuthRecord] = {}
         self._next = 0
         self.deleted: List[str] = []
+        # Records of what update_user() / revoke_refresh_tokens() were
+        # called with, for tests that need to assert the Admin SDK was
+        # actually invoked (e.g. routers/auth_flow.py's first-login change).
+        self.updated_passwords: Dict[str, str] = {}
+        self.revoked: List[str] = []
 
     def create_user(self, *, email: str, password: str, display_name: Optional[str] = None) -> FakeAuthRecord:
         if email in self._by_email:
@@ -164,8 +178,12 @@ class FakeAuth:
             raise self.UserNotFoundError(email)
         return self._by_email[email]
 
-    def update_user(self, uid: str, **_kwargs: Any) -> None:
-        return None
+    def update_user(self, uid: str, *, password: Optional[str] = None, **_kwargs: Any) -> None:
+        if password is not None:
+            self.updated_passwords[uid] = password
+
+    def revoke_refresh_tokens(self, uid: str) -> None:
+        self.revoked.append(uid)
 
     def delete_user(self, uid: str) -> None:
         self.deleted.append(uid)
