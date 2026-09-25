@@ -23,7 +23,20 @@ export default function RoleGate({ children, expectedRole }: { children: React.R
       try {
         const docRef = doc(db, 'users', user.uid);
         const docSnap = await getDoc(docRef);
-        const fetchedRole = docSnap.exists() ? (docSnap.data()?.role || 'student') : 'student';
+        const data = docSnap.data();
+        const fetchedRole = docSnap.exists() ? (data?.role || 'student') : 'student';
+
+        // Fast path: redirect to the forced password-change screen before
+        // any dashboard content renders or any protected API call is made,
+        // rather than waiting for the first API call to 403 with
+        // PASSWORD_CHANGE_REQUIRED (services/api.ts's response interceptor
+        // is the backstop for that, not the primary route here).
+        if (docSnap.exists() && data?.mustChangePassword) {
+          navigate('/first-login');
+          setRoleLoading(false);
+          return;
+        }
+
         setUserRole(fetchedRole);
 
         // Only redirect if the fetched role doesn't match what this route expects
@@ -49,7 +62,7 @@ export default function RoleGate({ children, expectedRole }: { children: React.R
   }, [user, loading, expectedRole]);
 
   if (loading || roleLoading) {
-    return <div>Loading...</div>;
+    return <div role="status">Loading...</div>;
   }
 
   if (user && userRole === expectedRole) {

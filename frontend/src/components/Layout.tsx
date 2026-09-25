@@ -4,7 +4,7 @@ import { signOut } from "firebase/auth";
 import { auth } from "../services/firebase";
 import { useProfile } from "../hooks/useProfile";
 
-const AUTH_PATHS = ["/login", "/register", "/"];
+const AUTH_PATHS = ["/login", "/register", "/", "/first-login"];
 
 const ROLE_HOME: Record<string, string> = {
   admin: "/admin-dashboard",

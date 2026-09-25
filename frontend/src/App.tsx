@@ -10,6 +10,7 @@ import ContentPage from './pages/ContentPage';
 import RoleGate from './components/RoleGate';
 import QuizPage from './pages/QuizPage';
 import SettingsPage from './pages/SettingsPage';
+import FirstLoginPage from './pages/FirstLoginPage';
 import Layout from './components/Layout';
 import AccessibleNotification from './components/AccessibleNotification';
 
@@ -25,6 +26,14 @@ const App: React.FC = () => {
               Anyone hitting the old /register link lands safely on /login. */}
           <Route path="/register" element={<Navigate to="/login" replace />} />
           <Route path="/" element={<LoginPage />} />
+
+          {/* Forced first-login password change — the only route reachable
+              while backend/auth.py's require_active_user() gate is blocking
+              everything else with 403 PASSWORD_CHANGE_REQUIRED. Not wrapped
+              in RoleGate: it is role-agnostic (any freshly admin-provisioned
+              account lands here regardless of role) and RoleGate's own
+              redirect logic is what sends the user here in the first place. */}
+          <Route path="/first-login" element={<FirstLoginPage />} />
 
           {/* Admin */}
           <Route
