@@ -40,3 +40,13 @@ LOG_FILE = BASE_DIR / "logs.jsonl"
 # against Google public keys, not the service-account key, so this can differ
 # from whatever project serviceAccountKey.json belongs to.
 FIREBASE_PROJECT_ID = os.environ.get("FIREBASE_PROJECT_ID", "eduease-b955c")
+
+# Login domain for admin-provisioned accounts that have no real email address
+# (most students). services/accounts.py builds "{username}@{domain}" when no
+# explicit email is supplied.
+SCHOOL_LOGIN_DOMAIN = os.environ.get("SCHOOL_LOGIN_DOMAIN", "students.eduease.local")
+
+# Deployment environment. Gates backend/scripts/seed_demo.py, which refuses to
+# run at all unless this is explicitly NOT "production" — see patent-readiness
+# audit finding A04 (hard-coded demo accounts seeded into every deployment).
+ENV = os.environ.get("ENV", "development")

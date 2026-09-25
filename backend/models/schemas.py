@@ -54,8 +54,19 @@ class SessionTelemetryLog(BaseModel):
 
 
 class CreateUserRequest(BaseModel):
+    """Legacy shape for the deprecated POST /admin/create-user alias in
+    app.py — kept for AdminDashboardPage.tsx's current wire format. The real
+    v2 schema is routers/admin.py's NewUserRequest.
+    """
+
     email: str
-    password: str = Field(min_length=6)
+    # DEPRECATED, IGNORED: every account now gets a server-generated
+    # temporary password (services/accounts.py) — never one the admin
+    # chose. Accepted here only so the old form (which still has a
+    # password field) doesn't fail client-side validation; kept optional
+    # rather than removed so a future frontend update can simply stop
+    # sending it without a schema change.
+    password: Optional[str] = None
     role: Literal["student", "teacher"]
     grade_level: Optional[str] = None
     teacher_id: Optional[str] = None
