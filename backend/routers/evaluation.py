@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from firebase_admin import firestore as admin_firestore
 from pydantic import BaseModel
 
-from auth import require_active_user
+from auth import assert_session_access, require_active_user, require_self_or_mapped_teacher
 from firebase_config import db
 from services import dase_engine
 
@@ -92,6 +92,16 @@ async def evaluate(req: EvaluateRequest, _user: dict = Depends(require_active_us
     # during the master/main integration once real auth existed to enforce it.
     student_id = _user.get("uid") or req.studentId
 
+    # The result above stops a student naming a DIFFERENT studentId; it does
+    # NOT stop them naming a DIFFERENT sessionId — without this, any
+    # authenticated user could read another student's session events by
+    # evaluating that session and inspecting the returned parameters/error
+    # breakdown (finding A02). write=True: evaluation is attributed to the
+    # caller, so only the session's own owner may trigger it — a mapped
+    # teacher reading it is a separate, read-only concern (GET /evaluation/
+    # {student_id} below), not this endpoint.
+    assert_session_access(req.sessionId, _user, write=True)
+
     questions, readings = _load_session_events(req.sessionId)
     if not questions and not readings:
         raise HTTPException(status_code=404, detail="No events found for this session")
@@ -112,7 +122,7 @@ async def evaluate(req: EvaluateRequest, _user: dict = Depends(require_active_us
 
 
 @router.get("/evaluation/{student_id}")
-async def get_evaluations(student_id: str, limit: int = 20, _user: dict = Depends(require_active_user)):
+async def get_evaluations(student_id: str, limit: int = 20, _user: dict = Depends(require_self_or_mapped_teacher)):
     _require_db()
     docs = (
         db.collection("evaluations")
@@ -129,7 +139,7 @@ async def get_evaluations(student_id: str, limit: int = 20, _user: dict = Depend
 
 
 @router.get("/evaluation/{student_id}/errors")
-async def get_error_breakdown(student_id: str, limit: int = 50, _user: dict = Depends(require_active_user)):
+async def get_error_breakdown(student_id: str, limit: int = 50, _user: dict = Depends(require_self_or_mapped_teacher)):
     """Aggregate error causes across a student's recent sessions."""
     _require_db()
     docs = (

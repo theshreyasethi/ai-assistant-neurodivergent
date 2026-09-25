@@ -19,7 +19,7 @@ from models.schemas import TurnSentiment, ChatbotResponse, QuizResultLog, Sessio
 # Extracted to auth.py during the master/main integration so the new DASE/
 # telemetry/voice routers can require the same real token verification
 # without importing back into this file.
-from auth import require_active_user, verify_role
+from auth import require_active_user, require_teacher_of, verify_role
 from services import accounts, image_describer, nlp_simplify, quiz_gen
 
 app = FastAPI()
@@ -511,7 +511,7 @@ async def get_students(_user: dict = Depends(verify_role("teacher"))):
 
 
 @app.get("/teacher/analytics/{student_id}")
-async def get_student_analytics(student_id: str, _user: dict = Depends(verify_role("teacher"))):
+async def get_student_analytics(student_id: str, _user: dict = Depends(require_teacher_of)):
     import traceback
     try:
         quiz_docs = (

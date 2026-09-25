@@ -121,3 +121,89 @@ def verify_role(required_role: str):
             raise HTTPException(status_code=403, detail="Insufficient permissions")
         return user
     return _check
+
+
+# ─────────────── per-student / per-session ownership (findings A01, A02) ───────────────
+
+
+def can_access_student(user: dict, student_id: str) -> bool:
+    """True if `user` may view student_id's data: the student themself, an
+    admin, or a teacher actively mapped to that student. Checks both the
+    dual-written teacher_id/teacherId fields on the student's own document
+    (services/accounts.py writes both) and an active enrollments/ record,
+    so a co-teacher relationship created only via enrollments still counts.
+    """
+    if not student_id or db is None:
+        return False
+    if user.get("uid") == student_id or user.get("role") == "admin":
+        return True
+    if user.get("role") != "teacher":
+        return False
+    teacher_uid = user.get("uid")
+    snap = db.collection("users").document(student_id).get()
+    if snap.exists:
+        data = snap.to_dict() or {}
+        if data.get("teacher_id") == teacher_uid or data.get("teacherId") == teacher_uid:
+            return True
+    enr = db.collection("enrollments").document(f"{teacher_uid}_{student_id}").get()
+    return enr.exists and bool((enr.to_dict() or {}).get("active"))
+
+
+def require_self_or_mapped_teacher(student_id: str, user: dict = Depends(require_active_user)) -> dict:
+    """Use as Depends(require_self_or_mapped_teacher) on a route with a
+    {student_id} path param where the student may see their OWN data, as
+    well as their mapped teacher or an admin — e.g. "my evaluation
+    history". 404, not 403, for anyone else: the response must never
+    confirm a given uid exists to someone not allowed to see it."""
+    if not can_access_student(user, student_id):
+        raise HTTPException(status_code=404, detail="Student not found")
+    return user
+
+
+def require_teacher_of(student_id: str, user: dict = Depends(require_active_user)) -> dict:
+    """Use as Depends(require_teacher_of) on a TEACHER-FACING route with a
+    {student_id} path param (e.g. a class-roster analytics view) — unlike
+    require_self_or_mapped_teacher, the student themself may NOT use this
+    to view their own data through a route meant for a teacher's own
+    dashboard. Only the student's mapped teacher, or an admin. 404 for
+    everyone else, same reasoning as above.
+
+    Patent-readiness audit finding A01 (Critical): GET /teacher/analytics/
+    {student_id} previously checked only role == "teacher" — ANY teacher
+    could read ANY student's analytics by guessing or enumerating uids.
+    This is the fix.
+    """
+    if user.get("role") not in ("teacher", "admin"):
+        raise HTTPException(status_code=404, detail="Student not found")
+    if not can_access_student(user, student_id):
+        raise HTTPException(status_code=404, detail="Student not found")
+    return user
+
+
+def assert_session_access(session_id: str, user: dict, *, write: bool = False) -> dict:
+    """Load sessions/{session_id} and verify `user` may access it. Read
+    access (write=False): the owning student, their mapped teacher, or an
+    admin. Write access (write=True, for anything that adds events to a
+    session, ends it, or evaluates it): the owning student ONLY — a
+    teacher viewing a session must never be able to alter it, and DASE
+    evaluation is attributed to the calling uid, so only the owner's call
+    means anything.
+
+    Patent-readiness audit finding A02 (Critical): ingest_events,
+    end_session, evaluate and get_events all accepted any authenticated
+    user and any id — a student could read another child's session
+    telemetry, or write events into a session that was never theirs.
+    """
+    if db is None:
+        raise HTTPException(status_code=503, detail="Persistence unavailable")
+    snap = db.collection("sessions").document(session_id).get()
+    if not snap.exists:
+        raise HTTPException(status_code=404, detail="Session not found")
+    data = snap.to_dict() or {}
+    owner = data.get("studentId")
+    if write:
+        if user.get("uid") != owner:
+            raise HTTPException(status_code=403, detail="Not your session")
+    elif not can_access_student(user, owner or ""):
+        raise HTTPException(status_code=404, detail="Session not found")
+    return data

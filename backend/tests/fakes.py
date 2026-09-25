@@ -35,8 +35,9 @@ class FakeDocSnapshot:
 
 
 class FakeDocRef:
-    def __init__(self, store: Dict[str, Dict[str, dict]], collection: str, doc_id: str):
-        self._store = store
+    def __init__(self, db: "FakeFirestore", collection: str, doc_id: str):
+        self._db = db
+        self._store = db.store
         self._collection = collection
         self._doc_id = doc_id
 
@@ -60,6 +61,13 @@ class FakeDocRef:
             raise KeyError(f"No document to update at {self._collection}/{self._doc_id}")
         coll[self._doc_id] = {**coll[self._doc_id], **data}
 
+    def collection(self, name: str) -> "_FakeCollection":
+        """A subcollection (e.g. sessions/{id}/events) — modelled as a
+        flat collection keyed by the composite path "parent/doc/name", so
+        it can't collide with a genuine top-level collection of the same
+        name and needs no tree structure."""
+        return _FakeCollection(self._db, f"{self._collection}/{self._doc_id}/{name}")
+
 
 class FakeQuery:
     def __init__(self, store: Dict[str, Dict[str, dict]], collection: str, filters: List[Tuple[str, Any]]):
@@ -67,12 +75,22 @@ class FakeQuery:
         self._collection = collection
         self._filters = filters
 
-    def where(self, field: str, op: str, value: Any) -> "FakeQuery":
+    def where(self, field: Optional[str] = None, op: Optional[str] = None, value: Any = None, *,
+              filter: Any = None) -> "FakeQuery":
+        # Two call shapes both appear in this codebase: the older positional
+        # .where(field, op, value), and the modern .where(filter=FieldFilter
+        # (field, op, value)) used by routers/evaluation.py and
+        # routers/analytics.py. Both reduce to the same (field, op, value).
+        if filter is not None:
+            field, op, value = filter.field_path, filter.op_string, filter.value
         assert op == "==", f"FakeQuery only supports '==', got {op!r}"
         return FakeQuery(self._store, self._collection, self._filters + [(field, value)])
 
     def limit(self, _n: int) -> "FakeQuery":
         return self  # not bothering to truncate — these tests use tiny fixtures
+
+    def order_by(self, _field: str) -> "FakeQuery":
+        return self  # ordering isn't asserted by any current test; keep results as-is
 
     def stream(self) -> Iterator[FakeDocSnapshot]:
         for doc_id, data in self._store.get(self._collection, {}).items():
@@ -89,10 +107,14 @@ class _FakeCollection:
         if doc_id is None:
             self._db._auto_id += 1
             doc_id = f"auto{self._db._auto_id}"
-        return FakeDocRef(self._db.store, self._name, doc_id)
+        return FakeDocRef(self._db, self._name, doc_id)
 
-    def where(self, field: str, op: str, value: Any) -> FakeQuery:
-        return FakeQuery(self._db.store, self._name, []).where(field, op, value)
+    def where(self, field: Optional[str] = None, op: Optional[str] = None, value: Any = None, *,
+              filter: Any = None) -> FakeQuery:
+        return FakeQuery(self._db.store, self._name, []).where(field, op, value, filter=filter)
+
+    def order_by(self, _field: str) -> FakeQuery:
+        return FakeQuery(self._db.store, self._name, [])
 
     def stream(self) -> Iterator[FakeDocSnapshot]:
         for doc_id, data in self._db.store.get(self._name, {}).items():

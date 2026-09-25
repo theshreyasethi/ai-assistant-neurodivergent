@@ -8,7 +8,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from firebase_admin import firestore as admin_firestore
 
-from auth import require_active_user
+from auth import assert_session_access, require_active_user
 from firebase_config import db
 from models.schemas import (
     EventBatch,
@@ -66,11 +66,26 @@ async def start_session(payload: SessionStart, _user: dict = Depends(require_act
 async def ingest_events(batch: EventBatch, _user: dict = Depends(require_active_user)):
     """Batch-write events. Validates each against its type schema and skips bad ones
     rather than failing the whole batch — losing one malformed event beats losing a
-    student's entire session."""
+    student's entire session.
+
+    Also verifies, per event, that its sessionId actually belongs to the
+    caller (finding A02) — without this, a student could write events into
+    (or read, via GET below) a session that was never theirs. A batch can
+    in principle carry events for more than one sessionId, so ownership is
+    checked per session, memoized so a batch of many events for the same
+    session costs one Firestore read, not one per event."""
     _require_db()
+    uid = _user.get("uid", "")
 
     written, skipped = 0, []
     bulk = db.batch()
+    owns_session: dict[str, bool] = {}
+
+    def _owns(session_id: str) -> bool:
+        if session_id not in owns_session:
+            snap = db.collection("sessions").document(session_id).get()
+            owns_session[session_id] = snap.exists and (snap.to_dict() or {}).get("studentId") == uid
+        return owns_session[session_id]
 
     for raw in batch.events:
         model = _EVENT_TYPES.get(raw.get("type"))
@@ -83,8 +98,12 @@ async def ingest_events(batch: EventBatch, _user: dict = Depends(require_active_
             skipped.append({"reason": str(exc)[:200]})
             continue
 
+        if not _owns(event.sessionId):
+            skipped.append({"reason": "not your session", "sessionId": event.sessionId})
+            continue
+
         data = event.model_dump()
-        data["studentId"] = _user.get("uid") or data.get("studentId")
+        data["studentId"] = uid
         # serverTs is the trustworthy clock — client `ts` is kept but never used for analysis.
         data["serverTs"] = admin_firestore.SERVER_TIMESTAMP
         ref = (
@@ -104,6 +123,9 @@ async def ingest_events(batch: EventBatch, _user: dict = Depends(require_active_
 @router.patch("/sessions/{session_id}")
 async def end_session(session_id: str, payload: SessionEnd, _user: dict = Depends(require_active_user)):
     _require_db()
+    # write=True: only the session's own owner may end it — a mapped
+    # teacher reading a session (GET below) must never be able to alter it.
+    assert_session_access(session_id, _user, write=True)
     db.collection("sessions").document(session_id).update(
         {"summary": payload.summary.model_dump(), "endedAt": admin_firestore.SERVER_TIMESTAMP}
     )
@@ -114,6 +136,10 @@ async def end_session(session_id: str, payload: SessionEnd, _user: dict = Depend
 async def get_events(session_id: str, _user: dict = Depends(require_active_user)):
     """Read back a session. Phase 2 (DASE) and Phase 4 (dashboard) both consume this."""
     _require_db()
+    # Read access: the owning student, their mapped teacher, or an admin —
+    # unlike end_session above, a teacher legitimately needs to read a
+    # mapped student's session for the dashboard, so this is write=False.
+    assert_session_access(session_id, _user, write=False)
     events = [
         doc.to_dict()
         for doc in db.collection("sessions")
