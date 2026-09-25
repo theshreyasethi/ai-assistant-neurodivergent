@@ -8,7 +8,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from firebase_admin import firestore as admin_firestore
 
-from auth import verify_user
+from auth import require_active_user
 from firebase_config import db
 from models.schemas import (
     EventBatch,
@@ -43,7 +43,7 @@ def _event_key(event: dict) -> str:
 
 
 @router.post("/sessions")
-async def start_session(payload: SessionStart, _user: dict = Depends(verify_user)):
+async def start_session(payload: SessionStart, _user: dict = Depends(require_active_user)):
     _require_db()
     # Authoritative studentId is the calling user — added during the master/main
     # integration once real auth existed to enforce this rather than trust a
@@ -63,7 +63,7 @@ async def start_session(payload: SessionStart, _user: dict = Depends(verify_user
 
 
 @router.post("/events")
-async def ingest_events(batch: EventBatch, _user: dict = Depends(verify_user)):
+async def ingest_events(batch: EventBatch, _user: dict = Depends(require_active_user)):
     """Batch-write events. Validates each against its type schema and skips bad ones
     rather than failing the whole batch — losing one malformed event beats losing a
     student's entire session."""
@@ -102,7 +102,7 @@ async def ingest_events(batch: EventBatch, _user: dict = Depends(verify_user)):
 
 
 @router.patch("/sessions/{session_id}")
-async def end_session(session_id: str, payload: SessionEnd, _user: dict = Depends(verify_user)):
+async def end_session(session_id: str, payload: SessionEnd, _user: dict = Depends(require_active_user)):
     _require_db()
     db.collection("sessions").document(session_id).update(
         {"summary": payload.summary.model_dump(), "endedAt": admin_firestore.SERVER_TIMESTAMP}
@@ -111,7 +111,7 @@ async def end_session(session_id: str, payload: SessionEnd, _user: dict = Depend
 
 
 @router.get("/sessions/{session_id}/events")
-async def get_events(session_id: str, _user: dict = Depends(verify_user)):
+async def get_events(session_id: str, _user: dict = Depends(require_active_user)):
     """Read back a session. Phase 2 (DASE) and Phase 4 (dashboard) both consume this."""
     _require_db()
     events = [

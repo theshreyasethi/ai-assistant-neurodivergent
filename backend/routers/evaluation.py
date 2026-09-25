@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from firebase_admin import firestore as admin_firestore
 from pydantic import BaseModel
 
-from auth import verify_user
+from auth import require_active_user
 from firebase_config import db
 from services import dase_engine
 
@@ -32,7 +32,7 @@ class ClassifyRequest(BaseModel):
 
 
 @router.post("/classify")
-async def classify(req: ClassifyRequest, _user: dict = Depends(verify_user)):
+async def classify(req: ClassifyRequest, _user: dict = Depends(require_active_user)):
     """Classify a single wrong answer and say whether to re-present it.
 
     Called synchronously by the quiz on wrong answers only, so the closed loop can
@@ -85,7 +85,7 @@ class EvaluateRequest(BaseModel):
 
 
 @router.post("/evaluate")
-async def evaluate(req: EvaluateRequest, _user: dict = Depends(verify_user)):
+async def evaluate(req: EvaluateRequest, _user: dict = Depends(require_active_user)):
     _require_db()
     # Authoritative studentId is the CALLING user, never the client-sent value —
     # a student must not be able to evaluate a session as someone else. Added
@@ -112,7 +112,7 @@ async def evaluate(req: EvaluateRequest, _user: dict = Depends(verify_user)):
 
 
 @router.get("/evaluation/{student_id}")
-async def get_evaluations(student_id: str, limit: int = 20, _user: dict = Depends(verify_user)):
+async def get_evaluations(student_id: str, limit: int = 20, _user: dict = Depends(require_active_user)):
     _require_db()
     docs = (
         db.collection("evaluations")
@@ -129,7 +129,7 @@ async def get_evaluations(student_id: str, limit: int = 20, _user: dict = Depend
 
 
 @router.get("/evaluation/{student_id}/errors")
-async def get_error_breakdown(student_id: str, limit: int = 50, _user: dict = Depends(verify_user)):
+async def get_error_breakdown(student_id: str, limit: int = 50, _user: dict = Depends(require_active_user)):
     """Aggregate error causes across a student's recent sessions."""
     _require_db()
     docs = (
@@ -152,7 +152,7 @@ async def get_error_breakdown(student_id: str, limit: int = 50, _user: dict = De
 
 
 @router.get("/dase/profiles")
-async def list_profiles(_user: dict = Depends(verify_user)):
+async def list_profiles(_user: dict = Depends(require_active_user)):
     """Weight profiles and their rationale — the teacher dashboard renders these,
     and they are what a teacher edits when overriding weights."""
     config = dase_engine.load_config()

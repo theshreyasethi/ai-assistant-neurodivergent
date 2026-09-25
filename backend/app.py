@@ -19,7 +19,7 @@ from models.schemas import TurnSentiment, ChatbotResponse, QuizResultLog, Sessio
 # Extracted to auth.py during the master/main integration so the new DASE/
 # telemetry/voice routers can require the same real token verification
 # without importing back into this file.
-from auth import verify_user, verify_role
+from auth import require_active_user, verify_role
 from services import accounts, image_describer, nlp_simplify, quiz_gen
 
 app = FastAPI()
@@ -165,7 +165,7 @@ MAX_PDF_PAGES = 20
 async def upload_pdf(
     file: UploadFile = File(...),
     describeImages: bool = Form(False),
-    _user: dict = Depends(verify_user),
+    _user: dict = Depends(require_active_user),
 ):
     pdf_data = await file.read()
     if len(pdf_data) > MAX_PDF_SIZE:
@@ -201,7 +201,7 @@ async def simplify_text(
     profile: str = Body("default"),
     grade_level: str | None = Body(None),
     reading_difficulty: str | None = Body(None),
-    _user: dict = Depends(verify_user),
+    _user: dict = Depends(require_active_user),
 ):
     """Merges two axes built separately by the two source branches: grade
     level + reading difficulty (main) and disability profile (master) — see
@@ -219,11 +219,11 @@ async def simplify_text(
 
 
 @app.get("/simplify-profiles/")
-async def simplify_profiles(_user: dict = Depends(verify_user)):
+async def simplify_profiles(_user: dict = Depends(require_active_user)):
     return {"profiles": nlp_simplify.available_profiles()}
 
 @app.post("/add-content/")
-async def add_content(text: str = Form(...), _user: dict = Depends(verify_user)):
+async def add_content(text: str = Form(...), _user: dict = Depends(require_active_user)):
     uid = _user.get("uid", "")
     try:
         doc_ref = db.collection("content").add({"text": text, "uid": uid})
@@ -233,7 +233,7 @@ async def add_content(text: str = Form(...), _user: dict = Depends(verify_user))
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/get-content/")
-async def get_content(_user: dict = Depends(verify_user)):
+async def get_content(_user: dict = Depends(require_active_user)):
     uid = _user.get("uid", "")
     try:
         content = []
@@ -250,7 +250,7 @@ async def generate_quiz(
     profile: str = Body("default", embed=True),
     grade_level: str | None = Body(None, embed=True),
     count: int = Body(9, embed=True),
-    _user: dict = Depends(verify_user),
+    _user: dict = Depends(require_active_user),
 ):
     """Merges main's 3-question-type distribution (mcq/true_false/fill_blank)
     with master's disability-adapted item formats and simpler-variant
@@ -283,7 +283,7 @@ async def chatbot(
     grade_level: str | None = Body(None),
     reading_difficulty: str | None = Body(None),
     profile: str | None = Body(None),
-    _user: dict = Depends(verify_user),
+    _user: dict = Depends(require_active_user),
 ):
     input_safe, sanitized_text = _validate_input(text)
     if not input_safe:
@@ -381,7 +381,7 @@ def _get_teacher_id(student_uid: str) -> str | None:
 
 
 @app.post("/analytics/log-quiz/")
-async def log_quiz(payload: QuizResultLog, _user: dict = Depends(verify_user)):
+async def log_quiz(payload: QuizResultLog, _user: dict = Depends(require_active_user)):
     uid = _user.get("uid", "")
     teacher_id = await run_in_threadpool(_get_teacher_id, uid)
     try:
@@ -401,7 +401,7 @@ async def log_quiz(payload: QuizResultLog, _user: dict = Depends(verify_user)):
 
 
 @app.post("/analytics/log-session/")
-async def log_session(payload: SessionTelemetryLog, _user: dict = Depends(verify_user)):
+async def log_session(payload: SessionTelemetryLog, _user: dict = Depends(require_active_user)):
     uid = _user.get("uid", "")
     teacher_id = await run_in_threadpool(_get_teacher_id, uid)
     try:
@@ -592,6 +592,7 @@ async def get_student_analytics(student_id: str, _user: dict = Depends(verify_ro
 # as every endpoint above.
 from routers import analytics as dase_analytics
 from routers import admin as admin_v2
+from routers import auth_flow
 from routers import evaluation, telemetry, voice_intent
 
 app.include_router(evaluation.router, prefix="/api")
@@ -599,6 +600,7 @@ app.include_router(telemetry.router, prefix="/api")
 app.include_router(voice_intent.router, prefix="/api")
 app.include_router(dase_analytics.router, prefix="/api")
 app.include_router(admin_v2.router, prefix="/api")
+app.include_router(auth_flow.router, prefix="/api")
 
 from starlette.middleware.cors import CORSMiddleware
 origins = [
