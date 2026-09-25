@@ -1,7 +1,6 @@
 from config import GOOGLE_API_KEY, GEMINI_MODEL
 
 from fastapi import FastAPI, File, UploadFile, Form, Body, Depends, HTTPException
-from firebase_admin import auth as firebase_auth
 from PyPDF2 import PdfReader
 import io
 import json
@@ -21,67 +20,21 @@ from models.schemas import TurnSentiment, ChatbotResponse, QuizResultLog, Sessio
 # telemetry/voice routers can require the same real token verification
 # without importing back into this file.
 from auth import verify_user, verify_role
-from services import image_describer, nlp_simplify, quiz_gen
+from services import accounts, image_describer, nlp_simplify, quiz_gen
 
 app = FastAPI()
 
-ADMIN_EMAIL = "admin@test.com"
-ADMIN_PASSWORD = "admin@123"
-
-
-def _ensure_user(email: str, password: str, profile: dict) -> str:
-    try:
-        existing = firebase_auth.get_user_by_email(email)
-        uid = existing.uid
-    except Exception:
-        new_user = firebase_auth.create_user(email=email, password=password)
-        uid = new_user.uid
-    doc = db.collection("users").document(uid).get()
-    if not doc.exists or doc.to_dict().get("role") != profile.get("role"):
-        db.collection("users").document(uid).set(profile, merge=True)
-    return uid
-
-
-def _seed_demo_data():
-    try:
-        admin_uid = _ensure_user(ADMIN_EMAIL, ADMIN_PASSWORD, {"email": ADMIN_EMAIL, "role": "admin"})
-
-        teacher_uids = []
-        for i in range(1, 4):
-            email = f"teacher{i}@test.com"
-            uid = _ensure_user(email, "teacher@123", {"email": email, "role": "teacher"})
-            teacher_uids.append(uid)
-
-        student_map: list[tuple[str, str]] = []
-        for i in range(1, 11):
-            email = f"student{i}@test.com"
-            teacher_uid = teacher_uids[(i - 1) % len(teacher_uids)]
-            grade = str(((i - 1) % 8) + 1)
-            uid = _ensure_user(email, "student@123", {
-                "email": email,
-                "role": "student",
-                "grade_level": grade,
-                "teacher_id": teacher_uid,
-            })
-            student_map.append((uid, teacher_uid))
-
-        # Deliberately no fake quiz_results/telemetry_sessions seeding here.
-        # This used to wipe both collections on every restart and refill them
-        # with 50 random records (scores, focus/frustration numbers, and
-        # topics from a fixed grade-agnostic pool like "Object-Oriented
-        # Programming") completely disconnected from what any student
-        # actually did — which both corrupted the "live, per-student" teacher
-        # view with nonsense and destroyed real quiz history on every
-        # restart. The teacher dashboard now shows only real data, written by
-        # /analytics/log-quiz/, /analytics/log-session/, and the DASE
-        # telemetry pipeline as students actually take quizzes.
-        print(f"[SEED] Seeded {len(student_map)} students, {len(teacher_uids)} teachers (no fake quiz/session data)")
-
-    except Exception as e:
-        print(f"[WARN] Seed skipped: {e}")
-
-
-_seed_demo_data()
+# Hard-coded ADMIN_EMAIL/ADMIN_PASSWORD constants and an automatic
+# _seed_demo_data() call used to live here, run on every process start, in
+# every deployment (patent-readiness audit finding A04). Removed. To get a
+# first admin account, run `python scripts/create_admin.py` out-of-band; to
+# seed a local development roster of demo teachers/students, run
+# `python scripts/seed_demo.py` explicitly (it refuses to run at all unless
+# ENV != production, and reads its passwords from environment variables —
+# never from a literal in source). Every other account is created through
+# POST /api/admin/users (routers/admin.py / services/accounts.py), which
+# validates the assigned teacher server-side and generates its own
+# temporary password rather than accepting one from the caller.
 
 SAFE_FALLBACK = (
     "Let's focus on our reading material together! "
@@ -469,20 +422,45 @@ async def log_session(payload: SessionTelemetryLog, _user: dict = Depends(verify
 
 @app.post("/admin/create-user")
 async def admin_create_user(payload: CreateUserRequest, _user: dict = Depends(verify_role("admin"))):
+    """DEPRECATED — kept as a thin, backward-compatible alias for the
+    pre-P1-04 admin UI (AdminDashboardPage.tsx), which still POSTs
+    {email, password, role, grade_level, teacher_id}. The real, hardened
+    endpoint is POST /api/admin/users (routers/admin.py): server-side
+    teacher validation, a generated temporary password, an enrollment
+    record, and an audit_log entry — all of which this alias now gets too,
+    by delegating to the same services.accounts.create_user().
+
+    `payload.password` is accepted for wire compatibility with the old form
+    but is IGNORED: an account always gets a freshly generated temporary
+    password now (see services/accounts.py — the whole point of this
+    hardening was that the *admin* choosing the new account's password is
+    exactly the weak/reused/default-password path that created finding
+    A04). Remove this alias once the admin UI is rebuilt against the v2 API
+    (roadmap task P1-09).
+    """
+    username = re.sub(r"[^a-z0-9._-]", "", payload.email.split("@")[0].lower())[:32] or "user"
     try:
-        new_user = firebase_auth.create_user(email=payload.email, password=payload.password)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Firebase user creation failed: {e}")
-    try:
-        user_data: dict = {"email": payload.email, "role": payload.role}
-        if payload.grade_level:
-            user_data["grade_level"] = payload.grade_level
-        if payload.teacher_id:
-            user_data["teacher_id"] = payload.teacher_id
-        db.collection("users").document(new_user.uid).set(user_data)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Firestore profile write failed: {e}")
-    return {"uid": new_user.uid, "email": payload.email, "role": payload.role}
+        result = accounts.create_user(
+            role=payload.role,
+            display_name=username,
+            username=username,
+            grade_level=payload.grade_level,
+            teacher_id=payload.teacher_id,
+            email=payload.email,
+            created_by=_user.get("uid", ""),
+        )
+    except accounts.AccountError as exc:
+        status = 422 if isinstance(exc, (accounts.TeacherInvalid, accounts.ValidationError)) else (
+            409 if isinstance(exc, accounts.UsernameTaken) else 500
+        )
+        raise HTTPException(status_code=status, detail=str(exc))
+    return {
+        "uid": result["uid"],
+        "email": result["loginId"],
+        "role": result["role"],
+        "temporaryPassword": result["temporaryPassword"],
+        "status": result["status"],
+    }
 
 
 @app.get("/admin/users")
@@ -492,12 +470,17 @@ async def admin_list_users(_user: dict = Depends(verify_role("admin"))):
         users = []
         for d in docs:
             data = d.to_dict()
+            # v2-schema accounts (services/accounts.py) write camelCase
+            # gradeLevel/teacherId; pre-v2 accounts wrote snake_case
+            # grade_level/teacher_id. Read both until roadmap task P1-06
+            # migrates every writer to camelCase-only.
             users.append({
                 "uid": d.id,
                 "email": data.get("email", ""),
                 "role": data.get("role", ""),
-                "grade_level": data.get("grade_level"),
-                "teacher_id": data.get("teacher_id"),
+                "grade_level": data.get("grade_level") or data.get("gradeLevel"),
+                "teacher_id": data.get("teacher_id") or data.get("teacherId"),
+                "status": data.get("status"),
             })
         return {"users": users}
     except Exception as e:
@@ -608,12 +591,14 @@ async def get_student_analytics(student_id: str, _user: dict = Depends(verify_ro
 # /teacher/analytics/{id} for the new dashboard. All auth-gated, same pattern
 # as every endpoint above.
 from routers import analytics as dase_analytics
+from routers import admin as admin_v2
 from routers import evaluation, telemetry, voice_intent
 
 app.include_router(evaluation.router, prefix="/api")
 app.include_router(telemetry.router, prefix="/api")
 app.include_router(voice_intent.router, prefix="/api")
 app.include_router(dase_analytics.router, prefix="/api")
+app.include_router(admin_v2.router, prefix="/api")
 
 from starlette.middleware.cors import CORSMiddleware
 origins = [

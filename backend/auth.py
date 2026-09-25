@@ -27,21 +27,9 @@ async def verify_user(request: Request) -> dict:
     return decoded
 
 
-# Maps known demo email addresses to their intended roles.
-# Auto-provisioning uses this so teacher/admin logins work on first access
-# even when their Firestore profile doesn't exist yet.
-_DEMO_ROLE_MAP: dict[str, str] = {
-    "admin@test.com": "admin",
-    "teacher1@test.com": "teacher",
-    "teacher2@test.com": "teacher",
-    "teacher3@test.com": "teacher",
-}
-
-
 def verify_role(required_role: str):
     async def _check(user: dict = Depends(verify_user)) -> dict:
         uid = user.get("uid")
-        email = user.get("email", "")
         if not uid:
             raise HTTPException(status_code=401, detail="Invalid token")
         if db is None:
@@ -51,13 +39,16 @@ def verify_role(required_role: str):
         except Exception:
             raise HTTPException(status_code=500, detail="Failed to verify role")
         if not user_doc.exists:
-            # Auto-provision: first login creates a profile with the correct role
-            role = _DEMO_ROLE_MAP.get(email, "student")
-            db.collection("users").document(uid).set({"email": email, "role": role})
-            if role != required_role:
-                raise HTTPException(status_code=403, detail="Insufficient permissions")
-            user["role"] = role
-            return user
+            # A valid Firebase ID token with no matching users/{uid} document
+            # used to auto-provision a Firestore profile on the spot — a
+            # string-matched allow-list (_DEMO_ROLE_MAP) decided whether that
+            # profile silently became an admin, a teacher, or (for anyone
+            # else) a student. Removed per patent-readiness audit finding
+            # A10: every account must come from admin provisioning
+            # (services/accounts.py / scripts/create_admin.py /
+            # scripts/seed_demo.py) — a missing profile is an error, never an
+            # implicit account.
+            raise HTTPException(status_code=403, detail="PROFILE_MISSING")
         role = user_doc.to_dict().get("role", "")
         if role != required_role:
             raise HTTPException(status_code=403, detail="Insufficient permissions")
