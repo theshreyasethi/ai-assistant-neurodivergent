@@ -1,9 +1,14 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import api from "../services/api";
+import Eye from "../components/Eye";
+import QuizCard from "../components/QuizCard";
 import { useProfile } from "../hooks/useProfile";
-import { scoringProfile } from "../types/profile";
-import { endSession, startSession, track, triggerEvaluation } from "../services/telemetry";
+import { canUseWebcam, scoringProfile } from "../types/profile";
+import { earcon } from "../services/earcons";
+import { speakOnce } from "../services/speech";
+import { useVoiceCommand } from "../hooks/useVoiceCommand";
+import { endSession, FocusMeter, setCurrentSession, startSession, track, triggerEvaluation } from "../services/telemetry";
 
 interface Question {
   questionId?: string;
@@ -16,11 +21,19 @@ interface Question {
   question_type?: "fill_blank" | "true_false" | "mcq";
 }
 
+const OPTION_LETTERS = ["A", "B", "C", "D"];
+
+// These profiles get A/B/C/D options for fill_blank questions instead of a
+// free-text box — "answer B" has nothing to select against free text, and
+// for dysgraphia/motor, typing itself is the barrier being worked around
+// (roadmap task P2-07 / patent-readiness finding B07).
+const FILL_BLANK_OPTIONS_PROFILES = new Set(["blind", "low_vision", "dyslexia", "dysgraphia", "motor"]);
+
 const QuizPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { text } = location.state || { text: "" };
-  const { uid, profile, gradeLevel, loading: profileLoading } = useProfile();
+  const { uid, profile, consent, gradeLevel, loading: profileLoading } = useProfile();
 
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -34,12 +47,10 @@ const QuizPage: React.FC = () => {
   const MAX_QUESTIONS = 10;
 
   // ─── DASE telemetry (DATA_CONTRACT §3.1) ───
-  // Without this, quizzes complete fine but the teacher dashboard's DASE
-  // panel has nothing to show — no session, no events, no evaluation ever
-  // gets written. See services/telemetry.ts.
   const sessionIdRef = useRef<string | null>(null);
   const quizStartRef = useRef<number>(Date.now());
   const questionStartRef = useRef<number>(Date.now());
+  const focusMeterRef = useRef(new FocusMeter());
 
   useEffect(() => {
     if (text && !profileLoading) {
@@ -59,13 +70,16 @@ const QuizPage: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text, profileLoading]);
 
-  // Open a telemetry session once we know who the student is and have questions.
+  // Open a telemetry session once we know who the student is and have
+  // questions, and register it globally so VoiceNavigator's VoiceEvent
+  // telemetry attributes to it (roadmap task P2-04).
   useEffect(() => {
     if (profileLoading || !uid || !questions.length || sessionIdRef.current) return;
     let cancelled = false;
     startSession(uid, "quiz").then((id) => {
       if (!cancelled) {
         sessionIdRef.current = id;
+        if (id) setCurrentSession(id);
         quizStartRef.current = Date.now();
         questionStartRef.current = Date.now();
       }
@@ -75,12 +89,37 @@ const QuizPage: React.FC = () => {
     };
   }, [profileLoading, uid, questions.length]);
 
+  useEffect(() => {
+    return () => setCurrentSession(null);
+  }, []);
+
   const totalQuestions = questions.length;
+  const currentQuestion = questions[currentIndex];
+  const qType = currentQuestion?.question_type || "fill_blank";
+  const showFillBlankOptions =
+    qType === "fill_blank" && profile.disabilities.some((d) => FILL_BLANK_OPTIONS_PROFILES.has(d));
+
+  // Announce + earcon on every new question, for voice-first students.
+  useEffect(() => {
+    if (!currentQuestion || loading || isQuizCompleted) return;
+    if (profile.prefs.voiceFirst) {
+      earcon.question();
+      const optionsLine =
+        qType === "fill_blank" && !showFillBlankOptions
+          ? ""
+          : ` Options: ${currentQuestion.options.map((o, i) => `${OPTION_LETTERS[i]}, ${o}`).join('. ')}.`;
+      speakOnce(`Question ${currentIndex + 1} of ${totalQuestions}. ${currentQuestion.question}${optionsLine}`, {
+        rate: profile.prefs.ttsRate || 1,
+        lang: profile.prefs.speechLang,
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex, loading, isQuizCompleted, currentQuestion?.question]);
 
   const getCurrentAnswer = (): string | null => {
     const q = questions[currentIndex];
     if (!q) return null;
-    if (q.question_type === "fill_blank") return typedAnswer.trim() || null;
+    if (q.question_type === "fill_blank" && !showFillBlankOptions) return typedAnswer.trim() || null;
     return selectedAnswer;
   };
 
@@ -88,25 +127,26 @@ const QuizPage: React.FC = () => {
     const userAnswer = getCurrentAnswer();
     if (!userAnswer) return;
 
-    const currentQuestion = questions[currentIndex];
+    const currentQ = questions[currentIndex];
     const isCorrect =
-      currentQuestion.question_type === "fill_blank"
-        ? userAnswer.toLowerCase() === currentQuestion.answer.toLowerCase()
-        : userAnswer === currentQuestion.answer;
+      currentQ.question_type === "fill_blank" && !showFillBlankOptions
+        ? userAnswer.toLowerCase() === currentQ.answer.toLowerCase()
+        : userAnswer === currentQ.answer;
 
-    const topicLabel = currentQuestion.topic || currentQuestion.answer;
+    const topicLabel = currentQ.topic || currentQ.answer;
 
     if (sessionIdRef.current && uid) {
+      const { focusRatio, focusSamples } = focusMeterRef.current.read();
       track({
         type: "question",
         sessionId: sessionIdRef.current,
         studentId: uid,
         ts: Date.now(),
-        questionId: currentQuestion.questionId || `q${currentIndex}`,
-        conceptId: currentQuestion.conceptId ?? null,
-        topic: currentQuestion.topic ?? null,
-        difficulty: currentQuestion.difficulty ?? 3,
-        questionType: currentQuestion.question_type ?? "mcq",
+        questionId: currentQ.questionId || `q${currentIndex}`,
+        conceptId: currentQ.conceptId ?? null,
+        topic: currentQ.topic ?? null,
+        difficulty: currentQ.difficulty ?? 3,
+        questionType: currentQ.question_type ?? "mcq",
         selected: userAnswer,
         correct: isCorrect,
         timeMs: Date.now() - questionStartRef.current,
@@ -116,17 +156,20 @@ const QuizPage: React.FC = () => {
         hintsUsed: 0,
         revisits: 0,
         reRead: false,
-        focusRatio: null,
-        focusSamples: 0,
+        focusRatio,
+        focusSamples,
         isRepresentation: false,
         originalQuestionId: null,
       });
+      focusMeterRef.current.reset();
     }
 
     if (isCorrect) {
       setScore((prev) => prev + 1);
+      if (profile.prefs.voiceFirst) speakOnce("Correct.", { rate: profile.prefs.ttsRate || 1 });
     } else {
       setWrongTopics((prev) => [...prev, topicLabel]);
+      if (profile.prefs.voiceFirst) speakOnce("Recorded.", { rate: profile.prefs.ttsRate || 1 });
     }
 
     const isFinal = currentIndex >= totalQuestions - 1;
@@ -146,12 +189,13 @@ const QuizPage: React.FC = () => {
       }).catch(() => {});
 
       if (sessionIdRef.current && uid) {
+        const { focusRatio } = focusMeterRef.current.read();
         endSession(sessionIdRef.current, {
           totalQuestions,
           correct: finalScore,
           totalTimeMs: Date.now() - quizStartRef.current,
           completed: true,
-          meanFocusRatio: null,
+          meanFocusRatio: focusRatio,
         }).then(() => triggerEvaluation(sessionIdRef.current, uid, scoringProfile(profile)));
       }
     }
@@ -166,10 +210,33 @@ const QuizPage: React.FC = () => {
     setIsQuizCompleted(false);
   };
 
+  const hasAnswer = qType === "fill_blank" && !showFillBlankOptions ? typedAnswer.trim().length > 0 : !!selectedAnswer;
+
+  // ── Voice commands (roadmap task P2-04/P2-07) ──
+  useVoiceCommand("ANSWER", (intent) => {
+    const idx = intent.slots.optionIndex as number;
+    const option = currentQuestion?.options[idx];
+    if (option) setSelectedAnswer(option);
+  });
+  useVoiceCommand("SUBMIT", () => {
+    if (hasAnswer) handleSubmit();
+  });
+  useVoiceCommand("REPEAT", () => {
+    if (!currentQuestion) return;
+    const optionsLine =
+      qType === "fill_blank" && !showFillBlankOptions
+        ? ""
+        : ` Options: ${currentQuestion.options.map((o, i) => `${OPTION_LETTERS[i]}, ${o}`).join(". ")}.`;
+    speakOnce(`${currentQuestion.question}${optionsLine}`, { rate: profile.prefs.ttsRate || 1, lang: profile.prefs.speechLang });
+  });
+  useVoiceCommand("PROGRESS", () => {
+    speakOnce(`Question ${currentIndex + 1} of ${totalQuestions}. ${score} correct so far.`, { rate: profile.prefs.ttsRate || 1 });
+  });
+
   if (loading) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
-        <p className="font-heading text-lg text-on-surface-variant animate-pulse">Loading quiz...</p>
+        <p className="font-heading text-lg text-on-surface-variant animate-pulse" role="status">Loading quiz...</p>
       </div>
     );
   }
@@ -264,9 +331,6 @@ const QuizPage: React.FC = () => {
     );
   }
 
-  const currentQuestion = questions[currentIndex];
-  const progress = Math.round(((currentIndex + 1) / totalQuestions) * 100);
-
   if (!currentQuestion || !currentQuestion.options) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
@@ -275,15 +339,10 @@ const QuizPage: React.FC = () => {
     );
   }
 
-  const qType = currentQuestion.question_type || "fill_blank";
-  const typeBadge =
-    qType === "mcq" ? { label: "Multiple Choice", cls: "bg-primary-fixed text-on-primary-fixed-variant" } :
-    qType === "true_false" ? { label: "True or False", cls: "bg-tertiary-fixed text-on-tertiary-fixed-variant" } :
-    { label: "Fill in the Blank", cls: "bg-secondary-container text-on-surface" };
-  const hasAnswer = qType === "fill_blank" ? typedAnswer.trim().length > 0 : !!selectedAnswer;
-
+  const progress = Math.round(((currentIndex + 1) / totalQuestions) * 100);
   const progressCircumference = 2 * Math.PI * 40;
   const progressOffset = progressCircumference - (progress / 100) * progressCircumference;
+  const webcamOn = canUseWebcam(profile, consent);
 
   return (
     <div className="max-w-[1400px] mx-auto px-4 md:px-12 py-8 animate-fade-in">
@@ -308,50 +367,24 @@ const QuizPage: React.FC = () => {
         </div>
       </header>
 
-      <div className="bento-grid">
-        {/* Question Card */}
-        <div className={`glass-card rounded-3xl p-6 md:p-8 ${qType === "fill_blank" || qType === "true_false" ? "col-span-12 md:col-span-8" : "col-span-12 md:col-span-8"}`}>
-          <div className="mb-6">
-            <span className={`font-heading text-xs font-semibold px-3 py-1 rounded-full ${typeBadge.cls}`}>{typeBadge.label}</span>
-            <h2 className="font-heading text-xl md:text-2xl font-semibold mt-3 text-on-surface">{currentQuestion.question}</h2>
-          </div>
-
-          {/* MCQ / True-False: radio options */}
-          {(qType === "true_false" || qType === "mcq") && (
-            <div className={`grid gap-3 ${qType === "true_false" ? "grid-cols-2" : "grid-cols-1"}`}>
-              {currentQuestion.options.map((option, index) => (
-                <label key={index}
-                  className={`group relative flex items-center p-4 border-2 rounded-xl cursor-pointer transition-all ${
-                    selectedAnswer === option
-                      ? "border-primary bg-primary-container/10"
-                      : "border-surface-variant hover:border-primary-container"
-                  }`}>
-                  <input type="radio" name="quiz" value={option}
-                    checked={selectedAnswer === option}
-                    onChange={() => setSelectedAnswer(option)}
-                    className="w-5 h-5 text-primary border-outline focus:ring-primary" />
-                  <span className={`ml-4 text-base font-body ${selectedAnswer === option ? "text-primary font-semibold" : "text-on-surface group-hover:text-primary"} transition-colors`}>
-                    {option}
-                  </span>
-                </label>
-              ))}
-            </div>
-          )}
-
-          {/* Fill-in-the-blank */}
-          {qType === "fill_blank" && (
-            <div className="relative">
-              <input
-                type="text" value={typedAnswer}
-                onChange={(e) => setTypedAnswer(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter" && hasAnswer) handleSubmit(); }}
-                placeholder="Enter your answer..."
-                className="w-full bg-surface-container-low border-2 border-outline-variant rounded-xl p-4 focus:border-primary focus:ring-0 transition-all font-body text-base"
-                autoFocus
-              />
-            </div>
-          )}
+      {webcamOn && (
+        <div className="mb-6 max-w-xs">
+          <Eye onFocusChange={(isFocused) => focusMeterRef.current.set(isFocused)} />
         </div>
+      )}
+
+      <div className="bento-grid">
+        <QuizCard
+          question={currentQuestion}
+          index={currentIndex}
+          total={totalQuestions}
+          selectedAnswer={selectedAnswer}
+          typedAnswer={typedAnswer}
+          onSelect={setSelectedAnswer}
+          onTypedChange={setTypedAnswer}
+          onSubmit={handleSubmit}
+          showOptionsForFillBlank={showFillBlankOptions}
+        />
 
         {/* Side: Topic + Progress */}
         <div className="col-span-12 md:col-span-4 flex flex-col gap-4">

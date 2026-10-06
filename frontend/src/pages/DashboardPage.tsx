@@ -93,7 +93,7 @@ const DashboardPage: React.FC = () => {
         </button>
       </div>
 
-      {showChatbot && <Chatbot />}
+      {showChatbot && <Chatbot onClose={() => setShowChatbot(false)} />}
     </>
   );
 };
