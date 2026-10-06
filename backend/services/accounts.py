@@ -263,3 +263,121 @@ def create_users_bulk(rows: List[Dict[str, str]], created_by: str) -> List[Dict[
         results.append(row_result)
 
     return results
+
+
+# ─────────────── account lifecycle: disable/enable, reset, reassign ───────────────
+# Roadmap task P1-09 — the admin UI needs a way to undo a mistake without
+# going back to the Firebase console: disable an account, reset a lost or
+# compromised password, or move a student to a different teacher.
+
+
+class AccountNotFound(AccountError):
+    """No users/{uid} document for the given id."""
+
+
+def _get_account(uid: str) -> Dict[str, Any]:
+    _require_db()
+    snap = db.collection("users").document(uid).get()
+    if not snap.exists:
+        raise AccountNotFound(f"No account '{uid}'")
+    return snap.to_dict() or {}
+
+
+def _audit(actor: str, action: str, target: str, details: Optional[Dict[str, Any]] = None) -> None:
+    db.collection("audit_log").document().set({
+        "actor": actor, "action": action, "target": target,
+        "details": details or {}, "at": admin_firestore.SERVER_TIMESTAMP,
+    })
+
+
+def set_account_status(uid: str, status: Literal["active", "disabled"], *, actor: str) -> Dict[str, Any]:
+    """Disable or re-enable an account. Disabling revokes every existing
+    session immediately (best-effort — a revoke failure still leaves the
+    account correctly marked disabled; auth.require_active_user's own
+    Firestore read is the actual enforcement point, the revoke just closes
+    out sessions that are already live). Re-enabling does NOT clear
+    mustChangePassword — an account that still owes a password change
+    before it was disabled still owes one after."""
+    account = _get_account(uid)
+    if status not in ("active", "disabled"):
+        raise ValidationError(f"Unsupported status: {status!r}")
+
+    db.collection("users").document(uid).update({"status": status})
+    if status == "disabled":
+        try:
+            firebase_auth.revoke_refresh_tokens(uid)
+        except Exception:  # noqa: BLE001
+            pass
+    _audit(actor, f"account.{status}", uid, {"previousStatus": account.get("status")})
+    return {"uid": uid, "status": status}
+
+
+def admin_reset_password(uid: str, *, actor: str) -> Dict[str, Any]:
+    """Generate a fresh temporary password for an EXISTING account — lost
+    or forgotten credential, or an admin-initiated security reset. Puts the
+    account back through the same pending_first_login / mustChangePassword
+    flow a brand-new account goes through (routers/auth_flow.py), and
+    revokes every existing session so the old password stops working
+    immediately rather than at next natural expiry."""
+    account = _get_account(uid)
+    login = account.get("email")
+    if not login:
+        raise AccountError(f"Account '{uid}' has no login email on record")
+
+    temp_password = generate_temp_password()
+    firebase_auth.update_user(uid, password=temp_password)
+    db.collection("users").document(uid).update({
+        "mustChangePassword": True,
+        "status": "pending_first_login",
+    })
+    try:
+        firebase_auth.revoke_refresh_tokens(uid)
+    except Exception:  # noqa: BLE001
+        pass
+    _audit(actor, "account.reset_password", uid)
+
+    return {"uid": uid, "loginId": login, "temporaryPassword": temp_password, "status": "pending_first_login"}
+
+
+def reassign_teacher(student_id: str, new_teacher_id: str, *, actor: str) -> Dict[str, Any]:
+    """Move a student to a different teacher: validates the new teacher
+    exactly as create_user() does (exists, role==teacher, not disabled),
+    closes the old enrollments/ record if one exists, opens a new one, and
+    dual-writes teacherId/teacher_id on the student's own document so every
+    existing snake_case reader (app.py's /teacher/students,
+    routers/analytics.py's _teacher_roster) sees the change too."""
+    account = _get_account(student_id)
+    if account.get("role") != "student":
+        raise AccountError(f"'{student_id}' is not a student account")
+    _validate_teacher(new_teacher_id)
+
+    old_teacher_id = account.get("teacherId") or account.get("teacher_id")
+    now = admin_firestore.SERVER_TIMESTAMP
+
+    batch = db.batch()
+    batch.update(db.collection("users").document(student_id), {
+        "teacherId": new_teacher_id, "teacher_id": new_teacher_id,
+    })
+    if old_teacher_id and old_teacher_id != new_teacher_id:
+        batch.set(
+            db.collection("enrollments").document(f"{old_teacher_id}_{student_id}"),
+            {"active": False, "endedAt": now},
+            merge=True,
+        )
+    batch.set(
+        db.collection("enrollments").document(f"{new_teacher_id}_{student_id}"),
+        {
+            "teacherId": new_teacher_id, "studentId": student_id, "active": True,
+            "since": now, "endedAt": None, "createdBy": actor,
+        },
+    )
+    batch.set(
+        db.collection("audit_log").document(),
+        {
+            "actor": actor, "action": "student.reassign", "target": student_id,
+            "details": {"from": old_teacher_id, "to": new_teacher_id}, "at": now,
+        },
+    )
+    batch.commit()
+
+    return {"studentId": student_id, "teacherId": new_teacher_id, "previousTeacherId": old_teacher_id}

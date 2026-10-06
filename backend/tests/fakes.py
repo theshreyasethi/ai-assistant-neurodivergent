@@ -122,15 +122,27 @@ class _FakeCollection:
 
 
 class FakeBatch:
-    def __init__(self) -> None:
-        self._ops: List[Tuple[FakeDocRef, dict]] = []
+    """Mirrors the real google.cloud.firestore WriteBatch surface this
+    codebase actually uses: .set() (with optional merge=), .update(), and
+    .commit() applying every queued op in order."""
 
-    def set(self, ref: FakeDocRef, data: dict) -> None:
-        self._ops.append((ref, data))
+    def __init__(self) -> None:
+        self._ops: List[Tuple[str, FakeDocRef, dict]] = []  # (kind, ref, data)
+
+    def set(self, ref: FakeDocRef, data: dict, merge: bool = False) -> None:
+        self._ops.append(("merge" if merge else "set", ref, data))
+
+    def update(self, ref: FakeDocRef, data: dict) -> None:
+        self._ops.append(("update", ref, data))
 
     def commit(self) -> None:
-        for ref, data in self._ops:
-            ref.set(data)
+        for kind, ref, data in self._ops:
+            if kind == "update":
+                ref.update(data)
+            elif kind == "merge":
+                ref.set(data, merge=True)
+            else:
+                ref.set(data)
 
 
 class FakeFirestore:

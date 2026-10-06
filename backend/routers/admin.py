@@ -1,14 +1,18 @@
-"""Admin account provisioning — schema v2.
+"""Admin account provisioning and lifecycle — schema v2.
 
-  POST /admin/users       - create one student/teacher account
-  POST /admin/users/bulk  - CSV bulk import (role,name,username,grade,teacher_email)
+  POST  /admin/users                         - create one student/teacher account
+  POST  /admin/users/bulk                    - CSV bulk import
+  PATCH /admin/students/{student_id}/teacher - reassign a student to a different teacher
+  POST  /admin/users/{uid}/disable           - disable an account
+  POST  /admin/users/{uid}/enable            - re-enable an account
+  POST  /admin/users/{uid}/reset-password    - issue a fresh temporary password
 
-Mounted under /api in app.py (matches every other router added since the
-master/main integration), giving /api/admin/users and
-/api/admin/users/bulk. Both replace app.py's original POST
-/admin/create-user, which is kept there as a thin backward-compatible
-alias — see app.py — so the current admin UI (AdminDashboardPage.tsx)
-keeps working until it is rebuilt against this API (roadmap task P1-09).
+Mounted under /api in app.py, giving /api/admin/users etc. POST
+/admin/users replaces app.py's original POST /admin/create-user, which is
+kept there as a thin backward-compatible alias — see app.py — so the
+current admin UI (AdminDashboardPage.tsx) keeps working until it is
+rebuilt against this API (roadmap task P1-09, done alongside these
+lifecycle routes).
 """
 
 import csv
@@ -43,6 +47,8 @@ class NewUserRequest(BaseModel):
 
 
 def _account_error_to_http(exc: accounts.AccountError) -> HTTPException:
+    if isinstance(exc, accounts.AccountNotFound):
+        return HTTPException(status_code=404, detail=str(exc))
     if isinstance(exc, accounts.TeacherInvalid):
         return HTTPException(status_code=422, detail=str(exc))
     if isinstance(exc, accounts.UsernameTaken):
@@ -89,3 +95,44 @@ async def create_users_bulk(file: UploadFile = File(...), admin: dict = Depends(
         "failed": sum(1 for r in results if r["status"] == "error"),
         "results": results,
     }
+
+
+class ReassignTeacherRequest(BaseModel):
+    teacherId: str = Field(min_length=1)
+
+
+@router.patch("/students/{student_id}/teacher")
+async def reassign_student_teacher(
+    student_id: str, body: ReassignTeacherRequest, admin: dict = Depends(require_admin),
+):
+    try:
+        return accounts.reassign_teacher(student_id, body.teacherId, actor=admin.get("uid", ""))
+    except accounts.AccountError as exc:
+        raise _account_error_to_http(exc)
+
+
+@router.post("/users/{uid}/disable")
+async def disable_user(uid: str, admin: dict = Depends(require_admin)):
+    try:
+        return accounts.set_account_status(uid, "disabled", actor=admin.get("uid", ""))
+    except accounts.AccountError as exc:
+        raise _account_error_to_http(exc)
+
+
+@router.post("/users/{uid}/enable")
+async def enable_user(uid: str, admin: dict = Depends(require_admin)):
+    try:
+        return accounts.set_account_status(uid, "active", actor=admin.get("uid", ""))
+    except accounts.AccountError as exc:
+        raise _account_error_to_http(exc)
+
+
+@router.post("/users/{uid}/reset-password")
+async def reset_user_password(uid: str, admin: dict = Depends(require_admin)):
+    """Returned ONCE, same as account creation — never stored in plaintext.
+    See services.accounts.admin_reset_password for what this does to the
+    account's mustChangePassword/status flags and existing sessions."""
+    try:
+        return accounts.admin_reset_password(uid, actor=admin.get("uid", ""))
+    except accounts.AccountError as exc:
+        raise _account_error_to_http(exc)
