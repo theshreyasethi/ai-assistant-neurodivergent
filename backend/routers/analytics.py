@@ -225,6 +225,15 @@ async def get_recommendation(
         f"Diagnostic-only (reported, not scored): {latest.get('diagnosticOnly')}\n"
         f"Error cause breakdown (proportions): {breakdown}\n"
     )
+    # A teacher-set weight override (routers/overrides.py, roadmap P3-08)
+    # changes what the score above actually measures — the recommendation
+    # must say so rather than discuss the score as if it came from the
+    # unmodified profile default.
+    if latest.get("overrideId"):
+        prompt += (
+            "NOTE: this student has a teacher-set DASE weight override active "
+            "on this score — mention that the weighting has been customized.\n"
+        )
 
     try:
         text = call_text(RECOMMENDATION_SYSTEM, prompt)

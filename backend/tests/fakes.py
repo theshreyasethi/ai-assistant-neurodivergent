@@ -61,6 +61,9 @@ class FakeDocRef:
             raise KeyError(f"No document to update at {self._collection}/{self._doc_id}")
         coll[self._doc_id] = {**coll[self._doc_id], **data}
 
+    def delete(self) -> None:
+        self._store.get(self._collection, {}).pop(self._doc_id, None)
+
     def collection(self, name: str) -> "_FakeCollection":
         """A subcollection (e.g. sessions/{id}/events) — modelled as a
         flat collection keyed by the composite path "parent/doc/name", so
@@ -145,6 +148,40 @@ class FakeBatch:
                 ref.set(data)
 
 
+class _FakeGroupQuery:
+    """Stands in for google.cloud.firestore's CollectionGroup — a query across
+    every subcollection named `name`, regardless of which parent document it
+    hangs off. routers/evaluation.py's error-breakdown endpoint uses this to
+    read every sessions/*/events subcollection in one query instead of one
+    read per session (roadmap P3-12)."""
+
+    def __init__(self, db: "FakeFirestore", name: str, filters: List[Tuple[str, Any]]):
+        self._db = db
+        self._name = name
+        self._filters = filters
+
+    def where(self, field: Optional[str] = None, op: Optional[str] = None, value: Any = None, *,
+              filter: Any = None) -> "_FakeGroupQuery":
+        if filter is not None:
+            field, op, value = filter.field_path, filter.op_string, filter.value
+        assert op == "==", f"_FakeGroupQuery only supports '==', got {op!r}"
+        return _FakeGroupQuery(self._db, self._name, self._filters + [(field, value)])
+
+    def limit(self, _n: int) -> "_FakeGroupQuery":
+        return self
+
+    def order_by(self, _field: str) -> "_FakeGroupQuery":
+        return self
+
+    def stream(self) -> Iterator[FakeDocSnapshot]:
+        for key, coll in self._db.store.items():
+            if key != self._name and not key.endswith(f"/{self._name}"):
+                continue
+            for doc_id, data in coll.items():
+                if all(data.get(field) == value for field, value in self._filters):
+                    yield FakeDocSnapshot(doc_id, data)
+
+
 class FakeFirestore:
     """Implements exactly the surface services/accounts.py and auth.py use:
     .collection(name).document(id).get()/.set(), .collection(name).where(...)
@@ -156,6 +193,9 @@ class FakeFirestore:
 
     def collection(self, name: str) -> _FakeCollection:
         return _FakeCollection(self, name)
+
+    def collection_group(self, name: str) -> _FakeGroupQuery:
+        return _FakeGroupQuery(self, name, [])
 
     def batch(self) -> FakeBatch:
         return FakeBatch()

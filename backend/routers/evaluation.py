@@ -14,9 +14,14 @@ from pydantic import BaseModel
 
 from auth import assert_session_access, require_active_user, require_self_or_mapped_teacher
 from firebase_config import db
-from services import dase_engine
+from services import baselines, dase_engine
 
 router = APIRouter()
+
+# Sessions scanned for TASK_COMP (completed ÷ started) and for the
+# cross-session CONSIST accuracy-stability input — a window, not the
+# student's whole history, so a score reflects recent behaviour.
+RECENT_SESSIONS_WINDOW = 20
 
 
 class ClassifyRequest(BaseModel):
@@ -74,12 +79,60 @@ def _load_session_events(session_id: str):
     return (
         [e for e in events if e.get("type") == "question"],
         [e for e in events if e.get("type") == "reading"],
+        [e for e in events if e.get("type") == "voice"],
     )
+
+
+def _scoring_profile(user: dict) -> str:
+    """The profile /evaluate actually scores against is derived from the
+    student's own stored profile, never the request body (roadmap P3-08) —
+    a client sending `profile: "default"` must not be able to dodge the
+    disability-weighted scoring it would otherwise get. `acct` is the
+    users/{uid} document require_active_user already fetched, so this costs
+    no extra read."""
+    stored_profile = (user.get("acct") or {}).get("profile") or {}
+    primary = stored_profile.get("primary")
+    if primary:
+        return primary
+    disabilities = stored_profile.get("disabilities") or []
+    return disabilities[0] if disabilities else "default"
+
+
+def _load_override_weights(student_id: str) -> tuple:
+    """A teacher's weight override (routers/overrides.py), if one is active
+    for this student. Returns (weights_or_None, override_id_or_None)."""
+    if db is None:
+        return None, None
+    doc = db.collection("dase_overrides").document(student_id).get()
+    if not doc.exists:
+        return None, None
+    weights = (doc.to_dict() or {}).get("weights")
+    return (weights, student_id) if weights else (None, None)
+
+
+def _recent_sessions(student_id: str, limit: int = RECENT_SESSIONS_WINDOW) -> List[dict]:
+    """The student's last N session documents, abandoned ones included — a
+    session that was started (it has a document) but never ended (summary is
+    still None) is exactly what TASK_COMP needs to count as "started, not
+    completed"."""
+    if db is None:
+        return []
+    docs = (
+        db.collection("sessions")
+        .where(filter=admin_firestore.FieldFilter("studentId", "==", student_id))
+        .limit(limit)
+        .stream()
+    )
+    return [d.to_dict() for d in docs]
 
 
 class EvaluateRequest(BaseModel):
     sessionId: str
     studentId: str
+    # DEPRECATED, IGNORED: the scoring profile is now always derived
+    # server-side from the student's own stored profile (roadmap P3-08) —
+    # kept only so existing callers (frontend/src/services/telemetry.ts)
+    # don't fail client-side validation while they still send it.
     profile: str = "default"
     persist: bool = True
 
@@ -102,18 +155,31 @@ async def evaluate(req: EvaluateRequest, _user: dict = Depends(require_active_us
     # {student_id} below), not this endpoint.
     assert_session_access(req.sessionId, _user, write=True)
 
-    questions, readings = _load_session_events(req.sessionId)
-    if not questions and not readings:
+    questions, readings, voices = _load_session_events(req.sessionId)
+    if not questions and not readings and not voices:
         raise HTTPException(status_code=404, detail="No events found for this session")
 
-    session_doc = db.collection("sessions").document(req.sessionId).get()
-    sessions = [session_doc.to_dict()] if session_doc.exists else []
+    profile = _scoring_profile(_user)
+    override_weights, override_id = _load_override_weights(student_id)
+    sessions = _recent_sessions(student_id)
+    baseline = baselines.baseline_ms(db, student_id)
 
-    parameters = dase_engine.compute_parameters(questions, readings, sessions)
-    result = dase_engine.compute_dase(parameters, req.profile)
+    parameters = dase_engine.compute_parameters(
+        questions, readings, sessions, voices, baseline_ms=baseline,
+    )
+    result = dase_engine.compute_dase(parameters, profile, override_weights=override_weights)
     result["errorBreakdown"] = dase_engine.error_breakdown(questions)
     result["sessionId"] = req.sessionId
     result["studentId"] = student_id
+    # configVersion/configSha256 (roadmap P3-10): so a score can be
+    # reproduced later from (events, configSha256) even after the weights
+    # file has since changed.
+    result["configVersion"] = dase_engine.config_version()
+    result["configSha256"] = dase_engine.config_sha256()
+    if override_id:
+        result["overrideId"] = override_id
+
+    baselines.record_correct_times(db, student_id, questions)
 
     if req.persist:
         db.collection("evaluations").add({**result, "computedAt": admin_firestore.SERVER_TIMESTAMP})
@@ -140,23 +206,33 @@ async def get_evaluations(student_id: str, limit: int = 20, _user: dict = Depend
 
 @router.get("/evaluation/{student_id}/errors")
 async def get_error_breakdown(student_id: str, limit: int = 50, _user: dict = Depends(require_self_or_mapped_teacher)):
-    """Aggregate error causes across a student's recent sessions."""
+    """Aggregate error causes across a student's recent sessions.
+
+    One collection-group query across every sessions/*/events subcollection,
+    filtered by studentId + type, instead of one query PER session to
+    discover its events (previously: one read to list sessions, then N more
+    reads, one per session, to fetch that session's own events). Every event
+    already carries its own studentId (routers/telemetry.py's ingest stamps
+    it), so the session list is never even needed. `sessionsScanned` is the
+    real count of distinct sessions the matched events came from, not
+    whatever `limit` happened to be passed in (roadmap P3-12 — previously
+    always reported `limit` itself, regardless of how many sessions actually
+    existed).
+    """
     _require_db()
     docs = (
-        db.collection("sessions")
+        db.collection_group("events")
         .where(filter=admin_firestore.FieldFilter("studentId", "==", student_id))
+        .where(filter=admin_firestore.FieldFilter("type", "==", "question"))
         .limit(limit)
         .stream()
     )
-
-    all_questions = []
-    for session in docs:
-        questions, _ = _load_session_events(session.id)
-        all_questions.extend(questions)
+    all_questions = [d.to_dict() for d in docs]
+    sessions_scanned = len({q.get("sessionId") for q in all_questions if q.get("sessionId")})
 
     return {
         "studentId": student_id,
-        "sessionsScanned": limit,
+        "sessionsScanned": sessions_scanned,
         **dase_engine.error_breakdown(all_questions),
     }
 
