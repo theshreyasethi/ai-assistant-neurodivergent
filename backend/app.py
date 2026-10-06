@@ -1,4 +1,4 @@
-from config import GOOGLE_API_KEY, GEMINI_MODEL
+from config import CORS_ORIGINS, GOOGLE_API_KEY, GEMINI_MODEL
 
 from fastapi import FastAPI, File, UploadFile, Form, Body, Depends, HTTPException
 from PyPDF2 import PdfReader
@@ -593,6 +593,7 @@ async def get_student_analytics(student_id: str, _user: dict = Depends(require_t
 from routers import analytics as dase_analytics
 from routers import admin as admin_v2
 from routers import auth_flow
+from routers import me as me_router
 from routers import evaluation, telemetry, voice_intent
 
 app.include_router(evaluation.router, prefix="/api")
@@ -601,18 +602,17 @@ app.include_router(voice_intent.router, prefix="/api")
 app.include_router(dase_analytics.router, prefix="/api")
 app.include_router(admin_v2.router, prefix="/api")
 app.include_router(auth_flow.router, prefix="/api")
+app.include_router(me_router.router, prefix="/api")
 
 from starlette.middleware.cors import CORSMiddleware
-origins = [
-    "http://localhost:3000",
-    "http://localhost:5173",
-    "http://localhost:5174",
-    "https://ai-assistant-neurodivergent-j92h.vercel.app"
-]
 
+# Bound dynamically from config.CORS_ORIGINS (env CORS_ORIGINS, comma-
+# separated) rather than hard-coded here — patent-readiness audit finding
+# A12. A deployment that needs a different origin set (a staging URL, a
+# different Vercel project) no longer requires editing source.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

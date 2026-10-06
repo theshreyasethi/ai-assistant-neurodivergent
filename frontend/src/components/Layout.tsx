@@ -72,6 +72,22 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                   {role && <p className="text-xs text-on-surface-variant capitalize mt-0.5">{role}</p>}
                 </div>
 
+                {/* Account (P1-08): every role reaches the self-service
+                    account page from the same menu entry. Settings (reading
+                    / accessibility prefs) stays student-only, unchanged. */}
+                <Link
+                  to="/account"
+                  onClick={() => setMenuOpen(false)}
+                  className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-heading font-semibold transition-all ${
+                    pathname === "/account"
+                      ? "bg-primary-container/50 text-on-primary-container"
+                      : "text-on-surface-variant hover:bg-surface-variant/30"
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-[18px]">account_circle</span>
+                  Account
+                </Link>
+
                 {role === "student" && (
                   <Link
                     to="/settings"

@@ -12,9 +12,12 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
-console.log("CRITICAL DEBUG - Runtime API Key:", firebaseConfig.apiKey);
-console.log("CRITICAL DEBUG - Full config:", JSON.stringify(firebaseConfig, null, 2));
-
+// Patent-readiness audit finding A11: this used to console.log the full
+// config, including the API key, on every page load in every environment
+// (dev AND production) — logged to the browser console, so logged into
+// crash-reporting tools, HAR exports, screen-share sessions, anything that
+// captures devtools output. Never log config/secrets; the guard below only
+// reports the ONE actionable fact a developer needs (the key is missing).
 if (!firebaseConfig.apiKey) {
   console.error(
     "[Firebase] VITE_FIREBASE_API_KEY is undefined. " +

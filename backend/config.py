@@ -15,11 +15,13 @@ if not GOOGLE_API_KEY:
 
 FIREBASE_CREDENTIALS = BASE_DIR / os.environ.get("FIREBASE_CREDENTIALS", "serviceAccountKey.json")
 
+_DEFAULT_CORS_ORIGINS = (
+    "http://localhost:3000,http://localhost:5173,http://localhost:5174,"
+    "https://ai-assistant-neurodivergent-j92h.vercel.app"
+)
 CORS_ORIGINS = [
     o.strip()
-    for o in os.environ.get(
-        "CORS_ORIGINS", "http://localhost:3000,http://localhost:5173,http://localhost:5174"
-    ).split(",")
+    for o in os.environ.get("CORS_ORIGINS", _DEFAULT_CORS_ORIGINS).split(",")
     if o.strip()
 ]
 

@@ -11,6 +11,7 @@ import RoleGate from './components/RoleGate';
 import QuizPage from './pages/QuizPage';
 import SettingsPage from './pages/SettingsPage';
 import FirstLoginPage from './pages/FirstLoginPage';
+import AccountPage from './pages/AccountPage';
 import Layout from './components/Layout';
 import AccessibleNotification from './components/AccessibleNotification';
 
@@ -34,6 +35,11 @@ const App: React.FC = () => {
               account lands here regardless of role) and RoleGate's own
               redirect logic is what sends the user here in the first place. */}
           <Route path="/first-login" element={<FirstLoginPage />} />
+
+          {/* Self-service account page (P1-08) — role-agnostic, same reason
+              /first-login isn't wrapped in RoleGate: every role (student,
+              teacher, admin) reaches it from the same account menu entry. */}
+          <Route path="/account" element={<AccountPage />} />
 
           {/* Admin */}
           <Route
