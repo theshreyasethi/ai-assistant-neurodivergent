@@ -14,11 +14,18 @@ import FirstLoginPage from './pages/FirstLoginPage';
 import AccountPage from './pages/AccountPage';
 import Layout from './components/Layout';
 import AccessibleNotification from './components/AccessibleNotification';
+import VoiceBootstrap from './components/VoiceBootstrap';
+import VoiceNavigator from './components/VoiceNavigator';
 
 const App: React.FC = () => {
   return (
     <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <AccessibleNotification />
+      {/* Route-aware (useLocation), so one mount here covers every page,
+          /login included — see VoiceBootstrap.tsx for why a second mount
+          inside LoginPage would just duplicate the same listeners. */}
+      <VoiceBootstrap />
+      <VoiceNavigator />
       <Layout>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
@@ -68,8 +75,12 @@ const App: React.FC = () => {
               </RoleGate>
             }
           />
+          {/* :contentId is optional — resumable lessons (roadmap task P2-06):
+              a fresh upload navigates here without one and LearningPage
+              assigns + redirects to it; a refresh or revisit reads it back
+              from localStorage via the param. */}
           <Route
-            path="/learning"
+            path="/learning/:contentId?"
             element={
               <RoleGate expectedRole="student">
                 <LearningPage />

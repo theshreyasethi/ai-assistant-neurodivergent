@@ -55,13 +55,47 @@ export interface ReadingEvent {
   simplifyProfile: string;
 }
 
-export type LearningEvent = QuestionEvent | ReadingEvent;
+/** PHASE 3 — feeds VOICE_Q and NAV_EFF. Emitted by VoiceNavigator.tsx into
+ * whichever session is currently registered via setCurrentSession(). */
+export interface VoiceEvent {
+  type: 'voice';
+  sessionId: string;
+  studentId: string;
+  ts: number;
+  transcript: string;
+  sttConfidence: number;
+  intent: string;
+  intentSource: string;
+  intentConfidence: number;
+  understood: boolean;
+  repeats: number;
+  actionMs: number | null;
+  route: string | null;
+}
+
+export type LearningEvent = QuestionEvent | ReadingEvent | VoiceEvent;
 
 const FLUSH_SIZE = 10;
 const FLUSH_MS = 5000;
 
 let buffer: LearningEvent[] = [];
 let timer: ReturnType<typeof setTimeout> | null = null;
+
+// The session VoiceEvent telemetry is attributed to — VoiceNavigator.tsx is
+// mounted once, globally, and has no page-local session ref of its own, so
+// whichever page currently owns a learning session (QuizPage, LearningPage)
+// registers it here. A voice command on a page with no active session
+// (the dashboard, say) simply has nowhere to attribute telemetry to, which
+// track() already handles by dropping events with no sessionId.
+let currentSessionId: string | null = null;
+
+export function setCurrentSession(sessionId: string | null): void {
+  currentSessionId = sessionId;
+}
+
+export function getCurrentSession(): string | null {
+  return currentSessionId;
+}
 
 export async function startSession(
   studentId: string,
@@ -117,6 +151,7 @@ export async function endSession(
   },
 ): Promise<void> {
   await flush();
+  if (currentSessionId === sessionId) currentSessionId = null;
   if (!sessionId) return;
   try {
     await api.patch(`/api/sessions/${sessionId}`, { summary });
