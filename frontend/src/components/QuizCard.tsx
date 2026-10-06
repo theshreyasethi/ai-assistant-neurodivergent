@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 
 export interface QuizCardQuestion {
   questionId?: string;
@@ -22,6 +22,12 @@ interface QuizCardProps {
    * select against free text, and typing is itself the barrier for some
    * of these profiles (roadmap task P2-07 / patent-readiness finding B07). */
   showOptionsForFillBlank: boolean;
+  /** First pointer/key event on this question (roadmap P3-01) — measures
+   * timeToFirstInteractionMs instead of hard-coding it to null. */
+  onInteract?: () => void;
+  /** Focus returned to the question stem after an option was already
+   * touched — counted as a revisit (roadmap P3-01). */
+  onStemRefocus?: () => void;
 }
 
 const OPTION_LETTERS = ['A', 'B', 'C', 'D'];
@@ -34,8 +40,13 @@ const OPTION_LETTERS = ['A', 'B', 'C', 'D'];
  */
 const QuizCard: React.FC<QuizCardProps> = ({
   question, index, total, selectedAnswer, typedAnswer, onSelect, onTypedChange, onSubmit, showOptionsForFillBlank,
+  onInteract, onStemRefocus,
 }) => {
   const qType = question.question_type || 'fill_blank';
+  const touchedOptionsRef = useRef(false);
+  useEffect(() => {
+    touchedOptionsRef.current = false;
+  }, [index, question.questionId]);
   const typeBadge =
     qType === 'mcq' ? { label: 'Multiple Choice', cls: 'bg-primary-fixed text-on-primary-fixed-variant' } :
     qType === 'true_false' ? { label: 'True or False', cls: 'bg-tertiary-fixed text-on-tertiary-fixed-variant' } :
@@ -45,7 +56,11 @@ const QuizCard: React.FC<QuizCardProps> = ({
   const legendId = `question-${index}-legend`;
 
   return (
-    <fieldset className="glass-card rounded-3xl p-6 md:p-8 col-span-12 md:col-span-8 border-0">
+    <fieldset
+      className="glass-card rounded-3xl p-6 md:p-8 col-span-12 md:col-span-8 border-0"
+      onPointerDownCapture={onInteract}
+      onKeyDownCapture={onInteract}
+    >
       <legend id={legendId} className="mb-6 w-full">
         <span className={`font-heading text-xs font-semibold px-3 py-1 rounded-full ${typeBadge.cls}`}>{typeBadge.label}</span>
         {/* Announced once per question change via this live region, so a
@@ -54,7 +69,17 @@ const QuizCard: React.FC<QuizCardProps> = ({
         <span role="status" aria-live="polite" className="sr-only">
           Question {index + 1} of {total}, {typeBadge.label}.
         </span>
-        <h2 className="font-heading text-xl md:text-2xl font-semibold mt-3 text-on-surface">{question.question}</h2>
+        <h2
+          className="font-heading text-xl md:text-2xl font-semibold mt-3 text-on-surface"
+          tabIndex={-1}
+          onFocus={() => {
+            // Only a REvisit if an option was already touched — the initial
+            // mount/auto-focus of the stem itself isn't a revisit.
+            if (touchedOptionsRef.current) onStemRefocus?.();
+          }}
+        >
+          {question.question}
+        </h2>
       </legend>
 
       {usesOptions && (
@@ -76,7 +101,7 @@ const QuizCard: React.FC<QuizCardProps> = ({
                   name={`quiz-q${index}`}
                   value={option}
                   checked={isChecked}
-                  onChange={() => onSelect(option)}
+                  onChange={() => { touchedOptionsRef.current = true; onSelect(option); }}
                   className="w-5 h-5 text-primary border-outline focus:ring-primary"
                 />
                 <span className="ml-3 shrink-0 font-heading text-xs font-bold text-on-surface-variant uppercase" aria-hidden="true">
@@ -98,7 +123,7 @@ const QuizCard: React.FC<QuizCardProps> = ({
             id="fill-blank-answer"
             type="text"
             value={typedAnswer}
-            onChange={(e) => onTypedChange(e.target.value)}
+            onChange={(e) => { touchedOptionsRef.current = true; onTypedChange(e.target.value); }}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && typedAnswer.trim()) onSubmit();
             }}

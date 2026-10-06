@@ -416,8 +416,8 @@ const LearningPage: React.FC = () => {
           {webcamOn && (
             <Eye
               sentiment={latestSentiment}
+              onSample={(onScreen) => focusMeterRef.current.sample(onScreen)}
               onFocusChange={(isFocused) => {
-                focusMeterRef.current.set(isFocused);
                 if (!isFocused && isPlaying) setIsPlaying(false);
               }}
             />

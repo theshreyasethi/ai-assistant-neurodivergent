@@ -11,7 +11,17 @@
  * Depends(verify_user) now requires on every /api/* route.
  */
 
+import { auth } from './firebase';
 import api from './api';
+
+/** Error-cause label from POST /api/classify — mirrors
+ * backend/models/schemas.py's Classification (roadmap P3-03). */
+export interface Classification {
+  label: 'KNOWLEDGE_GAP' | 'ATTENTION_LAPSE' | 'PROCESSING_DELAY' | 'COMPREHENSION_BARRIER';
+  confidence: number;
+  alternatives: string[];
+  signals: Record<string, unknown>;
+}
 
 export interface QuestionEvent {
   type: 'question';
@@ -23,6 +33,9 @@ export interface QuestionEvent {
   topic: string | null;
   difficulty: number;
   questionType: string;
+  /** Autism/PATTERN (roadmap P3-07): sequence/category/matching tag from
+   * the quiz generator. null for older or spaCy-fallback items. */
+  itemKind: string | null;
   selected: string | null;
   correct: boolean;
   timeMs: number;
@@ -36,6 +49,14 @@ export interface QuestionEvent {
   focusSamples: number;
   isRepresentation: boolean;
   originalQuestionId: string | null;
+  /** Set by the closed loop (POST /api/classify) on a wrong answer only —
+   * roadmap P3-03. The server re-stamps this on ingest if it's missing or
+   * stale, so a client never has the final say over its own label. */
+  classification: Classification | null;
+  classifierVersion: string | null;
+  /** spaCy-fallback item (LLM unreachable): never reviewed for quality,
+   * excluded from DASE scoring entirely (roadmap P3-11). */
+  degraded: boolean;
 }
 
 export interface ReadingEvent {
@@ -186,63 +207,85 @@ export async function triggerEvaluation(
   }
 }
 
-/** Best-effort flush when the tab closes — abandoned sessions feed TASK_COMP. */
-if (typeof window !== 'undefined') {
-  window.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden' && buffer.length) {
-      const batch = buffer;
-      buffer = [];
-      // fetch() is cancelled on unload; sendBeacon is the only reliable option here.
-      // sendBeacon can't carry an Authorization header, so this best-effort flush
-      // will only succeed if the backend ever allows it unauthenticated — until
-      // then it's a safe no-op rather than a thrown error.
-      const apiUrl = (api.defaults.baseURL as string) ?? '';
-      navigator.sendBeacon?.(
-        `${apiUrl}/api/events`,
-        new Blob([JSON.stringify({ events: batch })], { type: 'application/json' }),
-      );
-    }
-  });
+/**
+ * Authenticated best-effort flush when the tab is hidden or closing
+ * (roadmap P3-06). Every /api/* route requires a Bearer token, and
+ * navigator.sendBeacon cannot carry an Authorization header at all — the
+ * previous sendBeacon-based flush was a guaranteed no-op against this
+ * backend, not a fallback. fetch(..., {keepalive: true}) can carry headers
+ * and survives the page unloading, which is exactly what's needed here.
+ */
+async function _flushWithKeepalive(events: LearningEvent[]): Promise<void> {
+  try {
+    const token = await auth.currentUser?.getIdToken();
+    if (!token) return; // not signed in; nothing we can authenticate as
+    const apiUrl = (api.defaults.baseURL as string) ?? '';
+    await fetch(`${apiUrl}/api/events`, {
+      method: 'POST',
+      keepalive: true,
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ events }),
+    });
+  } catch {
+    // Best-effort: losing this flush is strictly better than throwing while
+    // the tab is unloading.
+  }
 }
 
+function _flushOnHide(): void {
+  if (!buffer.length) return;
+  const batch = buffer;
+  buffer = [];
+  void _flushWithKeepalive(batch);
+}
+
+if (typeof window !== 'undefined') {
+  // visibilitychange fires on every tab switch/minimize, not only on close —
+  // flushing there just means telemetry isn't lost if the student never
+  // comes back. pagehide is the more reliable close/navigate-away signal in
+  // browsers that don't fire visibilitychange on unload consistently.
+  window.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') _flushOnHide();
+  });
+  window.addEventListener('pagehide', _flushOnHide);
+}
+
+/** Must match backend/services/dase_engine.py's MIN_FOCUS_SAMPLES exactly —
+ * below this many samples the webcam signal is not trustworthy (contract §3.1). */
+const MIN_FOCUS_SAMPLES = 5;
+
 /**
- * Accumulates focus samples from <Eye>'s onFocusChange callback and reports the
- * fraction of time a face was visible.
+ * Counts raw per-tick face-presence samples from <Eye>'s onSample callback
+ * (roadmap P3-02) and reports the fraction that were on-screen.
+ *
+ * Previously this time-weighted the gaps between <Eye>'s DEBOUNCED
+ * onFocusChange transitions, which fired rarely (only when the 4-second
+ * FOCUS_LOST_MS threshold was crossed) — meaning most quiz questions never
+ * accumulated the 5 samples needed to report a ratio at all. Counting every
+ * 500ms tick directly is simpler and matches what the backend's own
+ * MIN_FOCUS_SAMPLES threshold assumes: ticks, not transitions.
  *
  * NOTE: this is FACE PRESENCE (or MediaPipe gaze-on-screen in this merged
  * codebase's Eye.tsx), not a guarantee of attention. Never surface it to
  * teachers as more than a supportive signal.
  */
 export class FocusMeter {
-  private focused = true;
-  private since = Date.now();
-  private focusedMs = 0;
-  private totalMs = 0;
-  private samples = 0;
+  private on = 0;
+  private total = 0;
 
-  set(focused: boolean): void {
-    const now = Date.now();
-    const delta = now - this.since;
-    this.totalMs += delta;
-    if (this.focused) this.focusedMs += delta;
-    this.focused = focused;
-    this.since = now;
-    this.samples += 1;
+  sample(onScreen: boolean): void {
+    this.total += 1;
+    if (onScreen) this.on += 1;
   }
 
   /** Returns null when there is too little data to be meaningful (contract §3.1). */
   read(): { focusRatio: number | null; focusSamples: number } {
-    const now = Date.now();
-    const total = this.totalMs + (now - this.since);
-    const focused = this.focusedMs + (this.focused ? now - this.since : 0);
-    if (this.samples < 5 || total === 0) return { focusRatio: null, focusSamples: this.samples };
-    return { focusRatio: +(focused / total).toFixed(3), focusSamples: this.samples };
+    if (this.total < MIN_FOCUS_SAMPLES) return { focusRatio: null, focusSamples: this.total };
+    return { focusRatio: +(this.on / this.total).toFixed(3), focusSamples: this.total };
   }
 
   reset(): void {
-    this.since = Date.now();
-    this.focusedMs = 0;
-    this.totalMs = 0;
-    this.samples = 0;
+    this.on = 0;
+    this.total = 0;
   }
 }

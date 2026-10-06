@@ -8,6 +8,7 @@ import { canUseWebcam, scoringProfile } from "../types/profile";
 import { earcon } from "../services/earcons";
 import { speakOnce } from "../services/speech";
 import { useVoiceCommand } from "../hooks/useVoiceCommand";
+import { useQuestionTelemetry } from "../hooks/useQuestionTelemetry";
 import { endSession, FocusMeter, setCurrentSession, startSession, track, triggerEvaluation } from "../services/telemetry";
 
 interface Question {
@@ -19,6 +20,20 @@ interface Question {
   topic?: string;
   difficulty?: number;
   question_type?: "fill_blank" | "true_false" | "mcq";
+  /** Autism/PATTERN (roadmap P3-07): sequence/category/matching tag from
+   * services/quiz_gen.py. */
+  itemKind?: string | null;
+  /** Closed-loop re-presentation (roadmap P3-03) — a pre-generated easier
+   * variant of the same concept, served when a wrong answer is classified
+   * as a confident COMPREHENSION_BARRIER. */
+  simplerQuestion?: string | null;
+  simplerOptions?: string[] | null;
+  simplerAnswer?: string | null;
+  /** Bumped to 2 once this slot has been swapped for its simpler variant —
+   * also used as part of the telemetry reset key below, since the
+   * questionId itself deliberately stays the same (the idempotency key in
+   * routers/telemetry.py already disambiguates by attempts). */
+  attempts?: number;
 }
 
 const OPTION_LETTERS = ["A", "B", "C", "D"];
@@ -43,14 +58,26 @@ const QuizPage: React.FC = () => {
   const [isQuizCompleted, setIsQuizCompleted] = useState(false);
   const [wrongTopics, setWrongTopics] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  // Whole-quiz degraded flag (services/quiz_gen.py's spaCy fallback, used
+  // when the LLM was unreachable) — propagated onto every tracked
+  // QuestionEvent so the engine excludes these items from DASE entirely
+  // (roadmap P3-11).
+  const [quizDegraded, setQuizDegraded] = useState(false);
 
   const MAX_QUESTIONS = 10;
 
   // ─── DASE telemetry (DATA_CONTRACT §3.1) ───
   const sessionIdRef = useRef<string | null>(null);
   const quizStartRef = useRef<number>(Date.now());
-  const questionStartRef = useRef<number>(Date.now());
   const focusMeterRef = useRef(new FocusMeter());
+  // Correct-answer times this session, oldest first — the closed loop's own
+  // comparison set for POST /api/classify (distinct from the backend's
+  // cross-session student_baselines, which /api/evaluate reads separately).
+  const priorTimesRef = useRef<number[]>([]);
+  // Which original questionIds have already been re-presented once —
+  // the closed loop fires at most once per question, even if the simpler
+  // variant is ALSO answered wrong.
+  const representedRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (text && !profileLoading) {
@@ -63,6 +90,7 @@ const QuizPage: React.FC = () => {
         .then((res) => {
           const data = res.data.questions.slice(0, MAX_QUESTIONS);
           setQuestions(data);
+          setQuizDegraded(!!res.data.degraded);
         })
         .catch((err) => console.error("Error fetching quiz:", err))
         .finally(() => setLoading(false));
@@ -81,7 +109,6 @@ const QuizPage: React.FC = () => {
         sessionIdRef.current = id;
         if (id) setCurrentSession(id);
         quizStartRef.current = Date.now();
-        questionStartRef.current = Date.now();
       }
     });
     return () => {
@@ -98,6 +125,12 @@ const QuizPage: React.FC = () => {
   const qType = currentQuestion?.question_type || "fill_blank";
   const showFillBlankOptions =
     qType === "fill_blank" && profile.disabilities.some((d) => FILL_BLANK_OPTIONS_PROFILES.has(d));
+
+  // Re-keyed on attempts (not just currentIndex): a closed-loop
+  // re-presentation (roadmap P3-03) replaces the question IN PLACE at the
+  // same index with the same questionId, so attempts flipping 1 -> 2 is
+  // what tells this hook a fresh question actually started.
+  const qt = useQuestionTelemetry(`${currentIndex}:${currentQuestion?.attempts ?? 1}`);
 
   // Announce + earcon on every new question, for voice-first students.
   useEffect(() => {
@@ -123,7 +156,7 @@ const QuizPage: React.FC = () => {
     return selectedAnswer;
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const userAnswer = getCurrentAnswer();
     if (!userAnswer) return;
 
@@ -134,9 +167,44 @@ const QuizPage: React.FC = () => {
         : userAnswer === currentQ.answer;
 
     const topicLabel = currentQ.topic || currentQ.answer;
+    const sig = qt.snapshot();
+    const { focusRatio, focusSamples } = focusMeterRef.current.read();
+    const attempts = currentQ.attempts ?? 1;
+
+    // Closed loop (roadmap P3-03): classify synchronously on a wrong answer,
+    // before tracking the event, so the classification travels WITH it
+    // rather than needing a second write.
+    let classification = null;
+    let shouldRepresent = false;
+    if (!isCorrect) {
+      try {
+        const { data } = await api.post("/api/classify", {
+          timeMs: sig.timeMs,
+          priorTimesMs: priorTimesRef.current,
+          focusRatio,
+          focusSamples,
+          answerChanges: sig.answerChanges,
+          timeToFirstInteractionMs: sig.timeToFirstInteractionMs,
+          reRead: sig.reRead,
+          timedOut: false,
+          hasSimplerVariant: !!currentQ.simplerQuestion,
+        });
+        classification = data.classification;
+        shouldRepresent = !!data.shouldRepresent;
+      } catch (err) {
+        console.warn("[quiz] classify failed; continuing without a label", err);
+      }
+    }
+
+    const willRepresent =
+      shouldRepresent &&
+      attempts < 2 &&
+      !representedRef.current.has(currentQ.questionId || `q${currentIndex}`) &&
+      !!currentQ.simplerQuestion &&
+      !!currentQ.simplerOptions &&
+      !!currentQ.simplerAnswer;
 
     if (sessionIdRef.current && uid) {
-      const { focusRatio, focusSamples } = focusMeterRef.current.read();
       track({
         type: "question",
         sessionId: sessionIdRef.current,
@@ -147,29 +215,54 @@ const QuizPage: React.FC = () => {
         topic: currentQ.topic ?? null,
         difficulty: currentQ.difficulty ?? 3,
         questionType: currentQ.question_type ?? "mcq",
+        itemKind: currentQ.itemKind ?? null,
         selected: userAnswer,
         correct: isCorrect,
-        timeMs: Date.now() - questionStartRef.current,
-        timeToFirstInteractionMs: null,
-        attempts: 1,
-        answerChanges: 0,
+        timeMs: sig.timeMs,
+        timeToFirstInteractionMs: sig.timeToFirstInteractionMs,
+        attempts,
+        answerChanges: sig.answerChanges,
         hintsUsed: 0,
-        revisits: 0,
-        reRead: false,
+        revisits: sig.revisits,
+        reRead: sig.reRead,
         focusRatio,
         focusSamples,
-        isRepresentation: false,
-        originalQuestionId: null,
+        isRepresentation: attempts > 1,
+        originalQuestionId: attempts > 1 ? currentQ.questionId ?? null : null,
+        classification,
+        classifierVersion: null, // stamped server-side on ingest
+        degraded: quizDegraded,
       });
       focusMeterRef.current.reset();
     }
+    if (isCorrect) priorTimesRef.current.push(sig.timeMs);
 
     if (isCorrect) {
       setScore((prev) => prev + 1);
       if (profile.prefs.voiceFirst) speakOnce("Correct.", { rate: profile.prefs.ttsRate || 1 });
-    } else {
+    } else if (!willRepresent) {
       setWrongTopics((prev) => [...prev, topicLabel]);
       if (profile.prefs.voiceFirst) speakOnce("Recorded.", { rate: profile.prefs.ttsRate || 1 });
+    }
+
+    if (willRepresent) {
+      // Swap this slot for its simpler variant IN PLACE — same index, same
+      // questionId, attempts bumped to 2. The idempotency key in
+      // routers/telemetry.py already disambiguates by attempts, so this
+      // question's second attempt is tracked as its own event rather than
+      // overwriting the first.
+      representedRef.current.add(currentQ.questionId || `q${currentIndex}`);
+      setQuestions((prev) =>
+        prev.map((q, i) =>
+          i === currentIndex
+            ? { ...q, question: q.simplerQuestion!, options: q.simplerOptions!, answer: q.simplerAnswer!, attempts: 2 }
+            : q,
+        ),
+      );
+      setSelectedAnswer(null);
+      setTypedAnswer("");
+      if (profile.prefs.voiceFirst) speakOnce("Let's try that a different way.", { rate: profile.prefs.ttsRate || 1 });
+      return;
     }
 
     const isFinal = currentIndex >= totalQuestions - 1;
@@ -177,7 +270,6 @@ const QuizPage: React.FC = () => {
       setCurrentIndex((prev) => prev + 1);
       setSelectedAnswer(null);
       setTypedAnswer("");
-      questionStartRef.current = Date.now();
     } else {
       const finalScore = score + (isCorrect ? 1 : 0);
       const finalWrong = isCorrect ? wrongTopics : [...wrongTopics, topicLabel];
@@ -189,13 +281,13 @@ const QuizPage: React.FC = () => {
       }).catch(() => {});
 
       if (sessionIdRef.current && uid) {
-        const { focusRatio } = focusMeterRef.current.read();
+        const { focusRatio: finalFocusRatio } = focusMeterRef.current.read();
         endSession(sessionIdRef.current, {
           totalQuestions,
           correct: finalScore,
           totalTimeMs: Date.now() - quizStartRef.current,
           completed: true,
-          meanFocusRatio: focusRatio,
+          meanFocusRatio: finalFocusRatio,
         }).then(() => triggerEvaluation(sessionIdRef.current, uid, scoringProfile(profile)));
       }
     }
@@ -208,21 +300,28 @@ const QuizPage: React.FC = () => {
     setSelectedAnswer(null);
     setTypedAnswer("");
     setIsQuizCompleted(false);
+    representedRef.current.clear();
+    priorTimesRef.current = [];
   };
 
   const hasAnswer = qType === "fill_blank" && !showFillBlankOptions ? typedAnswer.trim().length > 0 : !!selectedAnswer;
 
-  // ── Voice commands (roadmap task P2-04/P2-07) ──
+  // ── Voice commands (roadmap task P2-04/P2-07/P3-01) ──
   useVoiceCommand("ANSWER", (intent) => {
     const idx = intent.slots.optionIndex as number;
     const option = currentQuestion?.options[idx];
-    if (option) setSelectedAnswer(option);
+    if (option) {
+      qt.onInteract();
+      qt.onSelect(option);
+      setSelectedAnswer(option);
+    }
   });
   useVoiceCommand("SUBMIT", () => {
     if (hasAnswer) handleSubmit();
   });
   useVoiceCommand("REPEAT", () => {
     if (!currentQuestion) return;
+    qt.onReplayQuestion();
     const optionsLine =
       qType === "fill_blank" && !showFillBlankOptions
         ? ""
@@ -369,7 +468,7 @@ const QuizPage: React.FC = () => {
 
       {webcamOn && (
         <div className="mb-6 max-w-xs">
-          <Eye onFocusChange={(isFocused) => focusMeterRef.current.set(isFocused)} />
+          <Eye onSample={(onScreen) => focusMeterRef.current.sample(onScreen)} />
         </div>
       )}
 
@@ -380,8 +479,10 @@ const QuizPage: React.FC = () => {
           total={totalQuestions}
           selectedAnswer={selectedAnswer}
           typedAnswer={typedAnswer}
-          onSelect={setSelectedAnswer}
-          onTypedChange={setTypedAnswer}
+          onSelect={(opt) => { qt.onInteract(); qt.onSelect(opt); setSelectedAnswer(opt); }}
+          onTypedChange={(v) => { qt.onInteract(); setTypedAnswer(v); }}
+          onInteract={qt.onInteract}
+          onStemRefocus={qt.onStemRefocus}
           onSubmit={handleSubmit}
           showOptionsForFillBlank={showFillBlankOptions}
         />

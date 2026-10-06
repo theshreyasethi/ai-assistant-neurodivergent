@@ -9,6 +9,12 @@ export type Sentiment = {
 
 type Props = {
   onFocusChange?: (focused: boolean) => void;
+  /** Raw face-presence sample on every 500ms tick, BEFORE the
+   * FOCUS_LOST_MS debounce below — roadmap P3-02. Telemetry (FocusMeter)
+   * needs a measurement every tick to compute a trustworthy ratio;
+   * onFocusChange's debounced boolean exists for UI behaviours (pausing
+   * playback, the banner) that should NOT fire on every brief look-away. */
+  onSample?: (onScreen: boolean, ts: number) => void;
   sentiment?: Sentiment | null;
 };
 
@@ -71,13 +77,15 @@ function eyeCloseScore(blendshapes: any[]): number {
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
-const Eye: React.FC<Props> = ({ onFocusChange, sentiment }) => {
+const Eye: React.FC<Props> = ({ onFocusChange, onSample, sentiment }) => {
   const [status, setStatus]         = useState<"loading" | "tracking" | "error">("loading");
   const [errorMsg, setErrorMsg]     = useState("");
   const [focused, setFocused]       = useState(true);
   const focusedRef                  = useRef(true);
   const onFocusChangeRef            = useRef(onFocusChange);
   onFocusChangeRef.current          = onFocusChange;
+  const onSampleRef                 = useRef(onSample);
+  onSampleRef.current               = onSample;
 
   // Timestamps
   const lastOnScreenRef    = useRef(Date.now()); // last time gaze was on-screen
@@ -232,6 +240,10 @@ const Eye: React.FC<Props> = ({ onFocusChange, sentiment }) => {
       const now = Date.now();
       // "on screen" if gaze was detected in the last ON_SCREEN_GAP_MS ms
       const onScreen = now - lastOnScreenRef.current < ON_SCREEN_GAP_MS;
+
+      // Raw sample, every tick, regardless of the debounce below — this is
+      // what FocusMeter.sample() needs to compute focusRatio honestly.
+      onSampleRef.current?.(onScreen, now);
 
       if (onScreen) {
         unfocusedSinceRef.current = null;
