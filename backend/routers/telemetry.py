@@ -18,6 +18,7 @@ from models.schemas import (
     SessionStart,
     VoiceEvent,
 )
+from services import dase_engine
 
 router = APIRouter()
 
@@ -40,6 +41,49 @@ def _event_key(event: dict) -> str:
     if event.get("type") == "voice":
         return f"v_{uuid.uuid4().hex}"
     return f"r_{uuid.uuid4().hex}"
+
+
+def _prior_question_times(session_id: str) -> list:
+    """Already-committed question-event response times for this session, used
+    as the classifier's own-baseline comparison set. Only ever queried for a
+    wrong, unclassified answer (rare relative to total events), so this does
+    not add a read to every ingest call."""
+    docs = (
+        db.collection("sessions")
+        .document(session_id)
+        .collection("events")
+        .where(filter=admin_firestore.FieldFilter("type", "==", "question"))
+        .stream()
+    )
+    return [d.to_dict().get("timeMs") for d in docs if d.to_dict().get("timeMs")]
+
+
+def _reclassify_if_stale(session_id: str, data: dict) -> dict:
+    """Server-side re-classification at ingest (roadmap P3-04): the single
+    source of truth for a wrong answer's cause is this server-computed label,
+    never whatever the client sent — a client could omit or forge a
+    classification, and a formula change must relabel old-version events
+    without a separate backfill migration. Only runs for WRONG answers with no
+    label, or a label computed by a classifier version that has since changed.
+    """
+    if data.get("type") != "question" or data.get("correct"):
+        return data
+    if data.get("classification") and data.get("classifierVersion") == dase_engine.CLASSIFIER_VERSION:
+        return data
+
+    result = dase_engine.classify_error(
+        time_ms=data.get("timeMs") or 0,
+        prior_times_ms=_prior_question_times(session_id),
+        focus_ratio=data.get("focusRatio"),
+        focus_samples=data.get("focusSamples") or 0,
+        answer_changes=data.get("answerChanges") or 0,
+        time_to_first_interaction_ms=data.get("timeToFirstInteractionMs"),
+        re_read=bool(data.get("reRead")),
+    )
+    data["classification"] = result.to_dict()
+    data["classifierVersion"] = dase_engine.CLASSIFIER_VERSION
+    data["configSha256"] = dase_engine.config_sha256()
+    return data
 
 
 @router.post("/sessions")
@@ -106,6 +150,7 @@ async def ingest_events(batch: EventBatch, _user: dict = Depends(require_active_
         data["studentId"] = uid
         # serverTs is the trustworthy clock — client `ts` is kept but never used for analysis.
         data["serverTs"] = admin_firestore.SERVER_TIMESTAMP
+        data = _reclassify_if_stale(event.sessionId, data)
         ref = (
             db.collection("sessions")
             .document(event.sessionId)
