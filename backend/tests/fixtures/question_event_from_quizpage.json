@@ -1,0 +1,33 @@
+{
+  "type": "question",
+  "sessionId": "sess_abc123",
+  "studentId": "student_xyz",
+  "ts": 1732000000000,
+  "questionId": "q3",
+  "conceptId": "photosynthesis_inputs",
+  "topic": "Cell Biology",
+  "difficulty": 3,
+  "questionType": "mcq",
+  "itemKind": "recall",
+  "selected": "Carbon dioxide",
+  "correct": false,
+  "timeMs": 8421,
+  "timeToFirstInteractionMs": 612,
+  "attempts": 1,
+  "answerChanges": 2,
+  "hintsUsed": 0,
+  "revisits": 1,
+  "reRead": true,
+  "focusRatio": 0.78,
+  "focusSamples": 14,
+  "isRepresentation": false,
+  "originalQuestionId": null,
+  "classification": {
+    "label": "KNOWLEDGE_GAP",
+    "confidence": 0.62,
+    "alternatives": [],
+    "signals": { "timeMs": 8421, "baselineMs": 5000 }
+  },
+  "classifierVersion": "3.6",
+  "degraded": false
+}
