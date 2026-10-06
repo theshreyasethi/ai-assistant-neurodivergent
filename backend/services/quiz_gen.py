@@ -20,6 +20,10 @@ from services.cache import get_or_compute, make_key
 from services.llm import LLMUnavailable, call_json
 
 QUESTION_TYPES = ("mcq", "true_false", "fill_blank")
+# Autism/PATTERN (roadmap P3-07): items the LLM tags as testing sequencing,
+# categorisation or matching rather than plain recall — a relative strength
+# the DASE engine surfaces separately instead of folding into ACC.
+ITEM_KINDS = ("sequence", "category", "matching", "recall")
 
 BASE_RULES = """You write questions that test whether a student understood a lesson.
 
@@ -45,6 +49,9 @@ RULES:
 9. The simpler variant must obey the STUDENT PROFILE rules below at least as strictly
    as the main question — it is read by the SAME student, already struggling. Never
    introduce abbreviations, symbols, or compressed notation in the simpler variant.
+10. Tag `itemKind`: "sequence" if answering requires ordering events/steps, "category"
+    if it requires grouping/classifying something, "matching" if it pairs related
+    items, otherwise "recall". Be honest — most items are "recall".
 """
 
 FORMATS: Dict[str, str] = {
@@ -91,6 +98,7 @@ SCHEMA_HINT = """Return ONLY a JSON array of 9 objects, each exactly:
   "conceptId": "snake_case_string",
   "difficulty": 1,
   "explanation": "one sentence saying why the answer is right",
+  "itemKind": "sequence" | "category" | "matching" | "recall",
   "simplerQuestion": "string",
   "simplerOptions": ["string", ...],
   "simplerAnswer": "string (must be one of simplerOptions)"
@@ -159,6 +167,10 @@ def _normalise(item: dict, index: int) -> dict:
     except (TypeError, ValueError):
         difficulty = 3
 
+    item_kind = str(item.get("itemKind") or "").strip()
+    if item_kind not in ITEM_KINDS:
+        item_kind = "recall"
+
     return {
         "questionId": f"q{index}",
         "question": str(item["question"]).strip(),
@@ -168,6 +180,7 @@ def _normalise(item: dict, index: int) -> dict:
         "topic": str(item.get("topic") or "").strip() or None,
         "conceptId": str(item.get("conceptId") or "").strip() or None,
         "difficulty": difficulty,
+        "itemKind": item_kind,
         "explanation": str(item.get("explanation") or "").strip() or None,
         "simplerQuestion": str(item.get("simplerQuestion") or "").strip() or None,
         "simplerOptions": simpler_options or None,

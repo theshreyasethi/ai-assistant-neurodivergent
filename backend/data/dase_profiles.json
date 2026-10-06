@@ -1,15 +1,22 @@
 {
+  "_version": "2",
   "_readme": [
-    "DASE weight profiles. Config, not code \u2014 teachers may override per student and",
+    "DASE weight profiles. Config, not code — teachers may override per student and",
     "the override is logged (roadmap 2.2).",
     "",
-    "Weights here are the FULL intended set, including parameters that are not yet",
-    "measurable (VOICE_Q and NAV_EFF arrive in Phase 3, VIS_ENG in Phase 5, WRIT_EXP",
-    "and FRUST are unimplemented). The engine renormalizes over whatever it can",
-    "actually compute for a given session, so declaring intent here costs nothing and",
-    "the parameter switches itself on when its data source lands.",
+    "Weights here are the FULL intended set, including parameters not yet measurable",
+    "for every profile (VOICE_Q/NAV_EFF: blind/low_vision only; VIS_ENG: Phase 4,",
+    "P4-01; WRIT_EXP: diagnosticOnly under dysgraphia pending Phase 4's KNOW/EXPR",
+    "split). The engine renormalizes over whatever it can actually compute for a",
+    "given session, so declaring intent here costs nothing and the parameter",
+    "switches itself on when its data source lands.",
     "",
-    "Weights need not sum to 1 \u2014 they are normalized at scoring time.",
+    "Every profile's declared weights sum to 1.0 exactly (P3-10 weight-hygiene pass —",
+    "adhd and dyslexia previously summed to 1.10; deaf to 0.85 after WRIT_EXP's",
+    "removal). The engine ALSO renormalizes over the usable subset at scoring time,",
+    "so a profile naming a parameter the engine cannot yet measure is never",
+    "penalised for it — these are two different renormalizations for two different",
+    "reasons, not a contradiction.",
     "",
     "IMPORTANT: these are literature-informed, NOT empirically validated. Any claim",
     "made from them must say so. Run scripts/run_ablation.py after changing them."
@@ -25,11 +32,12 @@
     "LRN_VEL": "Slope of correctness over the session sequence",
     "TASK_COMP": "Fraction of started sessions that were completed",
     "READ_FL": "Reading fluency: words-per-minute against comprehension",
-    "VOICE_Q": "PHASE 3 \u2014 quality of spoken responses",
-    "NAV_EFF": "PHASE 3 \u2014 navigation efficiency for screen-reader/voice users",
-    "VIS_ENG": "PHASE 5 \u2014 engagement with visual content",
-    "WRIT_EXP": "NOT IMPLEMENTED \u2014 written expression quality",
-    "FRUST": "NOT IMPLEMENTED \u2014 frustration index"
+    "VOICE_Q": "PHASE 3 — quality of spoken responses",
+    "NAV_EFF": "PHASE 3 — navigation efficiency for screen-reader/voice users",
+    "PATTERN": "Accuracy on sequence/category/matching items (quiz_gen itemKind), ≥3 such items",
+    "RESIL": "1 − HES (interaction-only hesitation index: latency vs personal baseline + answer changes; tab-blur and chat-sentiment inputs land in P4-15). Renamed from FRUST so higher-is-better matches its positive weight",
+    "VIS_ENG": "PHASE 4 (P4-01) — engagement with visual content (diagram dwell, card expansions, replays). Defined; data source not yet built",
+    "WRIT_EXP": "diagnosticOnly under dysgraphia pending P4-10's KNOW/EXPR split — no computation source yet"
   },
   "attentionLapseCredit": 0.75,
   "representThreshold": 0.45,
@@ -49,14 +57,14 @@
     "adhd": {
       "rationale": "Raw accuracy is less meaningful than accuracy after attention-lapse errors are discounted. Attention span and effort weighted heavily to reward persistence rather than punish distractibility.",
       "weights": {
-        "ACC": 0.15,
-        "ADJ_ACC": 0.28,
-        "ATT_SPAN": 0.15,
-        "EFFORT": 0.22,
-        "TASK_COMP": 0.1,
-        "LRN_VEL": 0.1,
-        "CONSIST": 0.05,
-        "FRUST": 0.05
+        "ACC": 0.1364,
+        "ADJ_ACC": 0.2544,
+        "ATT_SPAN": 0.1364,
+        "EFFORT": 0.2,
+        "TASK_COMP": 0.0909,
+        "LRN_VEL": 0.0909,
+        "CONSIST": 0.0455,
+        "RESIL": 0.0455
       },
       "diagnosticOnly": [
         "ATT_SPAN"
@@ -65,17 +73,18 @@
     "dyslexia": {
       "rationale": "Comprehension matters far more than raw accuracy, which is depressed by decoding errors rather than misunderstanding. Reading fluency captures the speed/comprehension trade-off.",
       "weights": {
-        "ACC": 0.1,
-        "COMP": 0.32,
-        "READ_FL": 0.15,
-        "EFFORT": 0.18,
-        "LRN_VEL": 0.15,
-        "TIME_EFF": 0.1,
-        "CONSIST": 0.05,
-        "FRUST": 0.05
+        "ACC": 0.0909,
+        "COMP": 0.2908,
+        "READ_FL": 0.1364,
+        "EFFORT": 0.1636,
+        "LRN_VEL": 0.1364,
+        "TIME_EFF": 0.0909,
+        "CONSIST": 0.0455,
+        "RESIL": 0.0455
       },
       "diagnosticOnly": [
-        "READ_FL"
+        "READ_FL",
+        "TIME_EFF"
       ]
     },
     "autism": {
@@ -88,11 +97,11 @@
         "LRN_VEL": 0.1,
         "TIME_EFF": 0.1,
         "TASK_COMP": 0.1,
-        "FRUST": 0.05
+        "RESIL": 0.05
       }
     },
     "blind": {
-      "rationale": "Voice interaction and navigation efficiency capture how effectively content is reached. Time efficiency is de-emphasized because screen-reader navigation is inherently slower. ATT_SPAN is deliberately absent \u2014 webcam attention tracking is meaningless here.",
+      "rationale": "Voice interaction and navigation efficiency capture how effectively content is reached. Time efficiency is de-emphasized because screen-reader navigation is inherently slower. ATT_SPAN is deliberately absent — webcam attention tracking is meaningless here.",
       "weights": {
         "ACC": 0.2,
         "VOICE_Q": 0.15,
@@ -101,7 +110,7 @@
         "COMP": 0.15,
         "LRN_VEL": 0.1,
         "TIME_EFF": 0.05,
-        "FRUST": 0.05
+        "RESIL": 0.05
       },
       "diagnosticOnly": [
         "TIME_EFF"
@@ -116,23 +125,22 @@
         "NAV_EFF": 0.15,
         "LRN_VEL": 0.15,
         "TIME_EFF": 0.1,
-        "FRUST": 0.05
+        "RESIL": 0.05
       },
       "diagnosticOnly": [
         "TIME_EFF"
       ]
     },
     "deaf": {
-      "rationale": "Visual engagement and written expression are the key channels. Comprehension is weighted because reading is the primary input channel, and reading proficiency is often below grade level for reasons unrelated to subject understanding.",
+      "rationale": "Visual engagement is the key channel; comprehension is weighted because reading is the primary input and reading proficiency is often below grade level for reasons unrelated to subject understanding. WRIT_EXP was removed rather than made diagnosticOnly (2025 weight-hygiene pass, P3-10): unlike dysgraphia, deafness does not mechanically depress written expression, so diagnosticOnly's own justification rule does not apply — it was simply dead weight with no computation source, inflating the achievable coverage ceiling for no reason. Revisit once P4-10's EXPR exists.",
       "weights": {
-        "ACC": 0.2,
-        "VIS_ENG": 0.2,
-        "WRIT_EXP": 0.15,
-        "COMP": 0.15,
-        "EFFORT": 0.1,
-        "LRN_VEL": 0.1,
-        "CONSIST": 0.05,
-        "FRUST": 0.05
+        "ACC": 0.2354,
+        "VIS_ENG": 0.2353,
+        "COMP": 0.1765,
+        "EFFORT": 0.1176,
+        "LRN_VEL": 0.1176,
+        "CONSIST": 0.0588,
+        "RESIL": 0.0588
       }
     },
     "hard_of_hearing": {
@@ -155,14 +163,14 @@
         "LRN_VEL": 0.2,
         "CONSIST": 0.15,
         "TIME_EFF": 0.05,
-        "FRUST": 0.05
+        "RESIL": 0.05
       },
       "diagnosticOnly": [
         "TIME_EFF"
       ]
     },
     "dysgraphia": {
-      "rationale": "Written output under-represents knowledge. Until WRIT_EXP separates knowledge from expression (Phase 4.2), weight comprehension and effort.",
+      "rationale": "Written output under-represents knowledge. Until WRIT_EXP is split into KNOW (scored) and EXPR (Phase 4, P4-10), weight comprehension and effort, and report WRIT_EXP diagnostic-only: a more severe form of dysgraphia would mechanically lower written-expression quality independent of how much the student learned, so it must not be scored even once a computation source exists.",
       "weights": {
         "ACC": 0.2,
         "COMP": 0.2,
@@ -170,7 +178,10 @@
         "LRN_VEL": 0.15,
         "WRIT_EXP": 0.15,
         "TIME_EFF": 0.1
-      }
+      },
+      "diagnosticOnly": [
+        "WRIT_EXP"
+      ]
     },
     "anxiety": {
       "rationale": "Test anxiety depresses both accuracy and speed without reflecting understanding. Learning velocity and task completion are weighted heavily because improvement over time and simply finishing are the meaningful signals. TIME_EFF is near-zero: timing pressure is the stressor.",

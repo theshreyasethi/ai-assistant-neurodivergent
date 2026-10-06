@@ -82,6 +82,19 @@ class EventBase(BaseModel):
     ts: int  # client clock, ordering within a burst only
 
 
+class Classification(BaseModel):
+    """Error-cause label from services/dase_engine.classify_error — additive
+    to the frozen contract (PHASE 3, roadmap P3-03). Before this field
+    existed, Pydantic silently dropped `classification` from any incoming
+    event that carried it, so the closed loop's label was computed on the
+    client and then lost on ingest."""
+
+    label: Literal["KNOWLEDGE_GAP", "ATTENTION_LAPSE", "PROCESSING_DELAY", "COMPREHENSION_BARRIER"]
+    confidence: float = Field(ge=0, le=1)
+    alternatives: List[str] = Field(default_factory=list)
+    signals: dict = Field(default_factory=dict)
+
+
 class QuestionEvent(EventBase):
     type: Literal["question"] = "question"
     questionId: str
@@ -89,6 +102,9 @@ class QuestionEvent(EventBase):
     topic: Optional[str] = None
     difficulty: int = Field(default=3, ge=1, le=5)
     questionType: str = "mcq"
+    # Autism/PATTERN (roadmap P3-07): sequence/category/matching items tagged
+    # by services/quiz_gen.py. None for older or spaCy-fallback items.
+    itemKind: Optional[str] = None
 
     selected: Optional[str] = None
     correct: bool
@@ -106,6 +122,16 @@ class QuestionEvent(EventBase):
 
     isRepresentation: bool = False
     originalQuestionId: Optional[str] = None
+
+    # PHASE 3 (P3-03/P3-04) — additive. classification/classifierVersion are
+    # set by the closed loop (classify) at answer time, then stamped or
+    # corrected server-side on ingest if missing or stale (routers/telemetry.py).
+    classification: Optional[Classification] = None
+    classifierVersion: Optional[str] = None
+    configSha256: Optional[str] = None
+    # Spacy-fallback item (services/quiz_gen.py's LLM-unreachable path): never
+    # reviewed for quality, excluded from DASE scoring entirely (P3-11).
+    degraded: bool = False
 
 
 class ReadingEvent(EventBase):

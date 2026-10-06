@@ -25,6 +25,7 @@ IMPLEMENTATION_ROADMAP.md §2:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import statistics
 from dataclasses import dataclass, field
@@ -38,6 +39,12 @@ _CONFIG_PATH = Path(__file__).resolve().parent.parent / "data" / "dase_profiles.
 MIN_BASELINE_SAMPLES = 5
 # Below this many focus samples the webcam signal is not trustworthy (contract §3.1).
 MIN_FOCUS_SAMPLES = 5
+
+# Bumped whenever classify_error's logic changes in a way that would relabel
+# already-stored events. routers/telemetry.py re-classifies on ingest whenever
+# a stored event's classifierVersion doesn't match this, so a formula change
+# propagates to fresh data without a backfill migration.
+CLASSIFIER_VERSION = "3.6"
 
 KNOWLEDGE_GAP = "KNOWLEDGE_GAP"
 ATTENTION_LAPSE = "ATTENTION_LAPSE"
@@ -53,6 +60,18 @@ def load_config() -> Dict[str, Any]:
 
 
 _CONFIG = load_config()
+
+
+def config_sha256() -> str:
+    """SHA-256 of the exact bytes of dase_profiles.json, stamped onto every
+    evaluation and every server-reclassified event (roadmap P3-04, P3-10) so a
+    score can be reproduced later from (events, configSha256) even after the
+    weights file has since changed."""
+    return hashlib.sha256(_CONFIG_PATH.read_bytes()).hexdigest()
+
+
+def config_version() -> str:
+    return str(_CONFIG.get("_version", "1"))
 
 
 def profile_weights(profile: str) -> Dict[str, float]:
@@ -132,6 +151,18 @@ def classify_error(
     focus_known = focus_ratio is not None and focus_samples >= MIN_FOCUS_SAMPLES
     focus_trust = _clamp(focus_samples / (MIN_FOCUS_SAMPLES * 2)) if focus_known else 0.0
 
+    # Hesitation proxy: most of the allotted time spent NOT yet interacting,
+    # followed by a quick final action, looks different from simply working
+    # slowly throughout — it suggests the student froze, then guessed. Only
+    # meaningful once there was some interaction at all (first-interaction
+    # time equal to the total answer time means they acted immediately).
+    hesitated_then_acted = (
+        time_to_first_interaction_ms is not None
+        and time_ms > 0
+        and time_to_first_interaction_ms < time_ms
+        and (time_to_first_interaction_ms / time_ms) >= 0.6
+    )
+
     signals: Dict[str, Any] = {
         "timeMs": time_ms,
         "baselineMs": round(baseline) if baseline else None,
@@ -140,6 +171,7 @@ def classify_error(
         "focusSamples": focus_samples,
         "answerChanges": answer_changes,
         "reRead": re_read,
+        "timeToFirstInteractionMs": time_to_first_interaction_ms,
     }
 
     ratio = (time_ms / baseline) if baseline else None
@@ -192,11 +224,18 @@ def classify_error(
             # No usable focus data. Guessing between the two would be inventing a
             # result. Fall back to KNOWLEDGE_GAP but record what we could not rule
             # out, so the teacher dashboard and the paper both see the ambiguity.
+            # A long pre-interaction freeze followed by a fast answer leans the
+            # abstention toward ATTENTION_LAPSE rather than treating both
+            # alternatives as equally likely — froze-then-guessed looks more
+            # like disengagement than a stable knowledge gap.
+            alternatives = [ATTENTION_LAPSE, COMPREHENSION_BARRIER]
+            if hesitated_then_acted:
+                alternatives = [ATTENTION_LAPSE]
             return Classification(
                 KNOWLEDGE_GAP,
                 0.3,
                 {**signals, "reason": "fast answer, no usable focus data"},
-                alternatives=[ATTENTION_LAPSE, COMPREHENSION_BARRIER],
+                alternatives=alternatives,
             )
 
     # ── 4. Default: engaged, took a normal amount of time, still wrong.
@@ -287,26 +326,222 @@ def _voice_parameters(voice_events: List[dict]) -> Dict[str, float]:
     return params
 
 
+def _adj_acc(answered: List[dict]) -> Optional[float]:
+    """Accuracy after confidence-weighted credit for attention-lapse errors.
+
+    Emits in two cases only: a perfect session (no wrong answer to classify,
+    so ADJ_ACC trivially equals ACC — previously this vanished entirely for a
+    perfect session, which read as "we don't know" rather than "100%"), or a
+    session where the classifier actually covered enough of the wrong answers
+    (≥80%) that discounting lapses is a claim backed by real labels rather
+    than a handful of them.
+    """
+    wrong = [e for e in answered if not e.get("correct")]
+    classified = [e for e in wrong if (e.get("classification") or {}).get("label")]
+    if wrong and len(classified) / len(wrong) < 0.8:
+        return None
+
+    credit = _CONFIG.get("attentionLapseCredit", 0.75)
+    total = 0.0
+    for e in answered:
+        if e.get("correct"):
+            total += 1.0
+        else:
+            cls = e.get("classification") or {}
+            if cls.get("label") == ATTENTION_LAPSE:
+                total += credit * float(cls.get("confidence", 0.0))
+    return total / len(answered)
+
+
+def _consist(correct_times_ms: List[float], per_session_acc: List[float]) -> Optional[float]:
+    """Pace stability (coefficient of variation of correct-answer times) blended
+    with cross-session accuracy stability — replaces 1-4p(1-p), which scored a
+    student who missed every single question a perfect 1.0 (uniform failure is
+    not consistency; it is the opposite of what this parameter claims to measure).
+    Independent of accuracy LEVEL: a student who is reliably at 40% is exactly
+    as "consistent" as one reliably at 90%.
+    """
+    parts: List[float] = []
+    if len(correct_times_ms) >= 4:
+        mean_t = statistics.fmean(correct_times_ms)
+        cv = statistics.pstdev(correct_times_ms) / mean_t if mean_t else 1.0
+        parts.append(1.0 - min(cv, 1.0))
+    if len(per_session_acc) >= 3:
+        # pstdev of values in [0,1] maxes at 0.5 (half 0s, half 1s), so that's
+        # the natural scale to normalize against.
+        parts.append(1.0 - min(statistics.pstdev(per_session_acc) / 0.5, 1.0))
+    return statistics.fmean(parts) if parts else None
+
+
+def _time_eff(answered: List[dict], baseline_ms: Optional[float]) -> Optional[float]:
+    """Correct answers ONLY, against the student's CROSS-SESSION personal
+    baseline (services/baselines.py), never the current session's own
+    median — a session-local baseline let a uniformly fast-but-wrong student
+    score as "efficient", and credited speed on answers that were wrong.
+    """
+    times = [e["timeMs"] for e in answered if e.get("correct") and e.get("timeMs")]
+    if not baseline_ms or len(times) < 3:
+        return None
+    return statistics.fmean(min(baseline_ms / t, 1.0) for t in times)
+
+
+def _task_comp(recent_sessions: List[dict]) -> Optional[float]:
+    """Completed ÷ started over the last N sessions, abandoned ones included —
+    a session with no summary (tab closed, never ended) counts as started and
+    not completed, rather than being excluded from the denominator entirely,
+    which is what made this always read 1.0 for whatever single session was
+    just evaluated."""
+    if not recent_sessions:
+        return None
+    completed = sum(1 for s in recent_sessions if (s.get("summary") or {}).get("completed"))
+    return completed / len(recent_sessions)
+
+
+def _lrn_vel(correct: List[bool]) -> Optional[float]:
+    """Improvement across the session. Both halves scoring ≥0.9 is sustained
+    mastery, not "no change" — the original 0.5+(delta/2) mapping scored a
+    student who started and stayed perfect identically to one who started and
+    stayed at zero (both deltas are 0), which is the opposite of what the
+    dashboard should show for a student with nothing left to learn here."""
+    n = len(correct)
+    if n < 6:
+        return None
+    half = n // 2
+    first = sum(correct[:half]) / half
+    second = sum(correct[half:]) / (n - half)
+    if min(first, second) >= 0.9:
+        return 0.9
+    return _clamp(0.5 + (second - first) / 2)
+
+
+# Items tagged with one of these test non-recall skills (sequencing,
+# categorisation, matching) that autistic students often show as a relative
+# strength — PATTERN surfaces it instead of folding it into undifferentiated
+# accuracy (roadmap P3-07). quiz_gen.py tags itemKind; older/fallback items
+# have none and are simply excluded, same as any other absent signal.
+_PATTERN_ITEM_KINDS = {"sequence", "category", "matching"}
+MIN_PATTERN_ITEMS = 3
+
+
+def _pattern(answered: List[dict]) -> Optional[float]:
+    items = [e for e in answered if e.get("itemKind") in _PATTERN_ITEM_KINDS]
+    if len(items) < MIN_PATTERN_ITEMS:
+        return None
+    return sum(bool(e.get("correct")) for e in items) / len(items)
+
+
+def _hesitation_index(
+    *,
+    latency_ratio: Optional[float],
+    mean_answer_changes: Optional[float],
+    blur_per_question: Optional[float] = None,
+    chat_frustration: Optional[float] = None,
+) -> Optional[float]:
+    """HES: an interaction-only hesitation signal — never facial inference,
+    never a clinical label (docs/ROADMAP.md explicitly rejects inferring
+    anxiety from face landmarks). RESIL = 1 - HES is what DASE actually
+    scores, so "higher is better" matches RESIL's positive weight the way it
+    never did for the parameter it replaces (FRUST, named for the thing to
+    minimise but weighted as if higher were good).
+
+    PARTIAL for now: the full index (roadmap P4-15) also combines a tab-blur
+    count and the chatbot's mean per-turn frustration_score, neither of which
+    exists yet (no blur telemetry, no persisted chat sentiment). Until then
+    this blends only the two signals already available — latency vs the
+    student's own baseline, and how often they changed an answer — and
+    renormalizes its weights over whichever inputs are actually present,
+    the same renormalization discipline compute_dase() applies to the
+    composite itself. A session with neither signal returns None.
+    """
+    parts: List[tuple] = []
+    if latency_ratio is not None:
+        parts.append((0.30, _clamp((latency_ratio - 1.0) / 2.0)))  # 1x -> 0, >=3x -> 1
+    if mean_answer_changes is not None:
+        parts.append((0.25, _clamp(mean_answer_changes / 3.0)))
+    if blur_per_question is not None:
+        parts.append((0.20, _clamp(blur_per_question)))
+    if chat_frustration is not None:
+        parts.append((0.25, _clamp(chat_frustration)))
+    if not parts:
+        return None
+    total_w = sum(w for w, _ in parts)
+    return _clamp(sum(w * v for w, v in parts) / total_w)
+
+
+def _resil(answered: List[dict], baseline_ms: Optional[float]) -> Optional[float]:
+    times = [e.get("timeMs") for e in answered if e.get("timeMs")]
+    latency_ratio = (_safe_mean(times) or 0.0) / baseline_ms if baseline_ms and times else None
+    changes = [float(e.get("answerChanges") or 0) for e in answered]
+    mean_changes = _safe_mean(changes) if changes else None
+    hes = _hesitation_index(latency_ratio=latency_ratio, mean_answer_changes=mean_changes)
+    return None if hes is None else _clamp(1.0 - hes)
+
+
+def _vis_eng(visual_events: List[dict]) -> Optional[float]:
+    """Engagement with visual content (diagram dwell ≥3s, concept-card
+    expansions, replays) — defined and ready, but genuinely data-starved
+    until roadmap P4-01's VisualSummary component emits these events. Every
+    caller today passes an empty list, so this returns None exactly like any
+    other parameter with no data source; nothing here is a placeholder
+    constant that would silently dilute the deaf/hard_of_hearing composite.
+    """
+    if len(visual_events) < 3:
+        return None
+    engagement = [
+        _clamp(
+            0.5 * (1.0 if (e.get("dwellMs") or 0) >= 3000 else 0.0)
+            + 0.3 * (1.0 if e.get("expanded") else 0.0)
+            + 0.2 * (1.0 if e.get("replayed") else 0.0)
+        )
+        for e in visual_events
+    ]
+    return _safe_mean(engagement)
+
+
 def compute_parameters(
     question_events: List[dict],
     reading_events: Optional[List[dict]] = None,
     sessions: Optional[List[dict]] = None,
     voice_events: Optional[List[dict]] = None,
+    visual_events: Optional[List[dict]] = None,
+    baseline_ms: Optional[float] = None,
 ) -> Dict[str, float]:
     """Derive DASE parameters from raw telemetry.
 
     Returns only parameters that could actually be computed. A parameter with no
     data source is ABSENT, not zero — zero would read as "the student scored 0".
+
+    `sessions` is the student's last N sessions (TASK_COMP), not just the one
+    being evaluated. `baseline_ms` is the student's cross-session personal
+    median from services/baselines.py (TIME_EFF) — session-local timing data
+    alone cannot answer "fast or slow for THIS student", only "fast or slow
+    relative to itself", which is a different and weaker claim.
+
+    Items marked `degraded` (served by the spaCy fallback generator when the
+    LLM was unreachable) are excluded entirely before any parameter is
+    computed — a fallback item's text and distractors were never reviewed for
+    quality, and scoring a student on one is scoring them on the generator's
+    bad day, not their own performance.
     """
     reading_events = reading_events or []
     sessions = sessions or []
     voice_events = voice_events or []
+    visual_events = visual_events or []
+    question_events = [e for e in question_events if not e.get("degraded")]
     params: Dict[str, float] = {}
 
     # ── VOICE_Q / NAV_EFF (Phase 3). Computed before the early return: a blind
     # student may navigate by voice without answering a single question, and that
     # session still tells us how well the voice layer served them.
     params.update(_voice_parameters(voice_events))
+
+    vis_eng = _vis_eng(visual_events)
+    if vis_eng is not None:
+        params["VIS_ENG"] = vis_eng
+
+    task_comp = _task_comp(sessions)
+    if task_comp is not None:
+        params["TASK_COMP"] = task_comp
 
     answered = [e for e in question_events if e.get("selected") is not None or e.get("correct")]
     if not answered:
@@ -318,36 +553,18 @@ def compute_parameters(
     # ── ACC
     params["ACC"] = sum(correct) / n
 
-    # ── ADJ_ACC: confidence-weighted credit for attention lapses.
-    # Uses confidence rather than the binary label so a shaky classifier moves the
-    # score only slightly (roadmap §2.3).
-    credit_for_lapse = _CONFIG.get("attentionLapseCredit", 0.75)
-    total_credit = 0.0
-    has_classification = False
-    for event in answered:
-        if event.get("correct"):
-            total_credit += 1.0
-            continue
-        cls = event.get("classification") or {}
-        if cls:
-            has_classification = True
-        if cls.get("label") == ATTENTION_LAPSE:
-            total_credit += credit_for_lapse * float(cls.get("confidence", 0.0))
-    if has_classification:
-        params["ADJ_ACC"] = total_credit / n
+    adj_acc = _adj_acc(answered)
+    if adj_acc is not None:
+        params["ADJ_ACC"] = adj_acc
 
     # ── COMP: accuracy on the harder items, where understanding (not recall) is tested.
     hard = [e for e in answered if (e.get("difficulty") or 3) >= 3]
     if len(hard) >= 3:
         params["COMP"] = sum(bool(e.get("correct")) for e in hard) / len(hard)
 
-    # ── TIME_EFF: against the student's OWN median, never a cohort mean.
-    times = [e.get("timeMs") for e in answered if e.get("timeMs")]
-    baseline = rolling_median(times)
-    if baseline and len(times) >= 3:
-        # 1.0 when at or faster than personal baseline, decaying as it exceeds it.
-        ratios = [min(baseline / t, 1.0) if t else 0.0 for t in times]
-        params["TIME_EFF"] = _safe_mean(ratios) or 0.0
+    time_eff = _time_eff(answered, baseline_ms)
+    if time_eff is not None:
+        params["TIME_EFF"] = time_eff
 
     # ── ATT_SPAN: face-presence proxy. Absent without trustworthy webcam data.
     focus = [
@@ -358,20 +575,18 @@ def compute_parameters(
     if focus:
         params["ATT_SPAN"] = _safe_mean(focus) or 0.0
 
-    # ── CONSIST: stability of performance within each difficulty band.
-    by_difficulty: Dict[int, List[int]] = {}
-    for event in answered:
-        by_difficulty.setdefault(event.get("difficulty") or 3, []).append(
-            1 if event.get("correct") else 0
-        )
-    variances = [
-        statistics.pvariance(scores) for scores in by_difficulty.values() if len(scores) >= 2
+    correct_times = [e["timeMs"] for e in answered if e.get("correct") and e.get("timeMs")]
+    per_session_acc = [
+        (s.get("summary") or {}).get("correct", 0) / (s.get("summary") or {}).get("totalQuestions", 1)
+        for s in sessions
+        if (s.get("summary") or {}).get("totalQuestions")
     ]
-    if variances:
-        # pvariance of 0/1 data maxes at 0.25, so scale by 4 to reach [0,1].
-        params["CONSIST"] = _clamp(1.0 - (_safe_mean(variances) or 0.0) * 4)
+    consist = _consist(correct_times, per_session_acc)
+    if consist is not None:
+        params["CONSIST"] = consist
 
     # ── EFFORT: engagement signals, independent of whether the answer was right.
+    session_median = rolling_median([e.get("timeMs") for e in answered if e.get("timeMs")])
     effort_parts: List[float] = []
     for event in answered:
         engaged = 0.0
@@ -379,24 +594,23 @@ def compute_parameters(
         engaged += 0.2 if event.get("reRead") else 0.0
         engaged += 0.2 if (event.get("revisits") or 0) > 0 else 0.0
         t = event.get("timeMs") or 0
-        if baseline and t >= baseline * 0.5:
+        if session_median and t >= session_median * 0.5:
             engaged += 0.3  # gave it real time rather than clicking through
         effort_parts.append(_clamp(engaged))
     if effort_parts:
         params["EFFORT"] = _safe_mean(effort_parts) or 0.0
 
-    # ── LRN_VEL: improvement across the session.
-    if n >= 6:
-        half = n // 2
-        first = sum(correct[:half]) / half
-        second = sum(correct[half:]) / (n - half)
-        # Map a delta of [-1, 1] onto [0, 1]; 0.5 means no change.
-        params["LRN_VEL"] = _clamp(0.5 + (second - first) / 2)
+    lrn_vel = _lrn_vel(correct)
+    if lrn_vel is not None:
+        params["LRN_VEL"] = lrn_vel
 
-    # ── TASK_COMP
-    if sessions:
-        completed = sum(1 for s in sessions if (s.get("summary") or {}).get("completed"))
-        params["TASK_COMP"] = completed / len(sessions)
+    pattern = _pattern(answered)
+    if pattern is not None:
+        params["PATTERN"] = pattern
+
+    resil = _resil(answered, baseline_ms or session_median)
+    if resil is not None:
+        params["RESIL"] = resil
 
     # ── READ_FL: reading speed relative to a 200 wpm reference, capped at 1.
     if reading_events:
@@ -415,14 +629,24 @@ def compute_parameters(
 
 
 def compute_dase(
-    parameters: Dict[str, float], profile: str = "default"
+    parameters: Dict[str, float],
+    profile: str = "default",
+    override_weights: Optional[Dict[str, float]] = None,
 ) -> Dict[str, Any]:
     """Weighted composite over whatever parameters are actually available.
 
     Weights are renormalized across present parameters, so a profile that names a
     parameter we cannot yet measure is not penalised for it.
+
+    `override_weights`, when given, REPLACES the profile's declared weights
+    wholesale — a teacher's per-student override (routers/overrides.py,
+    roadmap P3-08) rather than the literature-informed default. The
+    diagnostic-only exclusion set still comes from the profile itself: which
+    parameters are mechanically depressed by a more severe form of the
+    condition is a fact about the disability, not something a teacher's
+    weight preference should be able to turn off.
     """
-    weights = profile_weights(profile)
+    weights = dict(override_weights) if override_weights is not None else profile_weights(profile)
     diagnostic = set(diagnostic_only(profile))
 
     # Scored weights exclude diagnostic-only parameters entirely. Their weight is
@@ -465,7 +689,14 @@ def compute_dase(
 
 
 def error_breakdown(question_events: List[dict]) -> Dict[str, Any]:
-    """Counts by error cause, plus how confident we were on average."""
+    """Counts by error cause, plus how confident we were on average.
+
+    Degraded (spaCy-fallback) items are excluded for the same reason
+    compute_parameters() excludes them: an unreviewed fallback question's
+    wrong answer says nothing trustworthy about why it was wrong.
+    """
+    degraded_excluded = sum(1 for e in question_events if e.get("degraded"))
+    question_events = [e for e in question_events if not e.get("degraded")]
     wrong = [e for e in question_events if not e.get("correct")]
     counts = {t: 0 for t in ERROR_TYPES}
     confidences: Dict[str, List[float]] = {t: [] for t in ERROR_TYPES}
@@ -491,4 +722,5 @@ def error_breakdown(question_events: List[dict]) -> Dict[str, Any]:
         },
         "totalWrong": len(wrong),
         "unclassified": unclassified,
+        "degradedExcluded": degraded_excluded,
     }
