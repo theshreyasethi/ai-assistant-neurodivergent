@@ -138,6 +138,13 @@ const SettingsPage: React.FC = () => {
         </h2>
         <div className="divide-y divide-outline-variant/40">
           <Toggle
+            icon="record_voice_over"
+            label="Voice-first mode"
+            description="Pages are announced and read aloud automatically, and voice commands are front and center. You can also turn this on anytime by pressing V."
+            checked={profile.prefs.voiceFirst}
+            onChange={(v) => void set('voiceFirst', { voiceFirst: v })}
+          />
+          <Toggle
             icon="volume_up"
             label="Read lessons aloud automatically"
             description="Text-to-speech starts automatically where available."
@@ -188,6 +195,46 @@ const SettingsPage: React.FC = () => {
             onChange={(e) => void set('ttsRate', { ttsRate: Number(e.target.value) })}
             className="w-full accent-primary"
           />
+        </div>
+
+        <div className="pt-5 mt-1 border-t border-outline-variant/40">
+          <label htmlFor="voice-engine" className="text-sm font-heading font-semibold text-on-surface block mb-1">
+            Who reads this app aloud?
+          </label>
+          <p className="text-xs text-on-surface-variant mb-2 font-body">
+            If you already use your own screen reader (NVDA, JAWS, VoiceOver), choose that option so
+            EduEase never speaks over it — announcements still reach you through text your screen reader
+            can read.
+          </p>
+          <select
+            id="voice-engine"
+            value={profile.prefs.voiceEngine}
+            onChange={(e) => void set('voiceEngine', { voiceEngine: e.target.value as 'app' | 'screenReader' })}
+            className="w-full rounded-xl border border-outline-variant bg-surface-container-low py-2 px-3 text-on-surface focus:outline-none focus:ring-2 focus:ring-primary"
+          >
+            <option value="app">EduEase reads pages aloud for me</option>
+            <option value="screenReader">I use my own screen reader</option>
+          </select>
+        </div>
+
+        <div className="pt-5 mt-1 border-t border-outline-variant/40">
+          <label htmlFor="speech-lang" className="text-sm font-heading font-semibold text-on-surface block mb-1">
+            Speech language
+          </label>
+          <p className="text-xs text-on-surface-variant mb-2 font-body">
+            Used for both reading aloud and voice commands.
+          </p>
+          <select
+            id="speech-lang"
+            value={profile.prefs.speechLang}
+            onChange={(e) => void set('speechLang', { speechLang: e.target.value })}
+            className="w-full rounded-xl border border-outline-variant bg-surface-container-low py-2 px-3 text-on-surface focus:outline-none focus:ring-2 focus:ring-primary"
+          >
+            <option value="en-US">English (US)</option>
+            <option value="en-GB">English (UK)</option>
+            <option value="hi-IN">Hindi</option>
+            <option value="ta-IN">Tamil</option>
+          </select>
         </div>
       </section>
 
