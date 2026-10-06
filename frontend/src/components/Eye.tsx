@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
+import { speakOnce } from "../services/speech";
 
 export type Sentiment = {
   frustration_score: number;
@@ -121,11 +122,7 @@ const Eye: React.FC<Props> = ({ onFocusChange, sentiment }) => {
   }, [focused, status, triggerBanner]);
 
   const speakBanner = useCallback(() => {
-    if ("speechSynthesis" in window && bannerMessage) {
-      const u = new SpeechSynthesisUtterance(bannerMessage);
-      u.lang = "en-US"; u.rate = 0.9;
-      speechSynthesis.speak(u);
-    }
+    if (bannerMessage) speakOnce(bannerMessage, { rate: 0.9 });
   }, [bannerMessage]);
 
   // ── Init: webcam + FaceLandmarker ────────────────────────────────────────

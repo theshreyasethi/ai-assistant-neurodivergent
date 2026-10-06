@@ -42,6 +42,19 @@ export interface Prefs {
   captionsAlways: boolean;
   webcamAttention: boolean;
   describeImages: boolean;
+  /** Opt-in, device-remembered (localStorage "eduease.voiceFirst") as well
+   * as stored here once signed in — VoiceBootstrap.tsx sets both. Drives
+   * the spoken welcome on entry and auto-starting TTS on the reading page. */
+  voiceFirst: boolean;
+  /** "app": our own speechSynthesis announces things (RouteAnnouncer,
+   * VoiceNavigator read-backs, earcons). "screenReader": the student runs
+   * their own AT (NVDA/JAWS/VoiceOver) — the app must never also speak,
+   * only expose aria-live text, or the two voices talk over each other. */
+  voiceEngine: 'app' | 'screenReader';
+  /** BCP-47 tag (e.g. "en-US", "hi-IN") used for both speechSynthesis and
+   * SpeechRecognition — kept separate from the UI's i18n language since a
+   * student may read the UI in one language and want speech in another. */
+  speechLang: string;
 }
 
 export interface Profile {
@@ -71,6 +84,9 @@ export const DEFAULT_PREFS: Prefs = {
   captionsAlways: false,
   webcamAttention: false,
   describeImages: false,
+  voiceFirst: false,
+  voiceEngine: 'app',
+  speechLang: 'en-US',
 };
 
 export const DEFAULT_PROFILE: Profile = {
@@ -89,6 +105,15 @@ export function scoringProfile(profile: Profile): string {
 export function webcamAllowed(profile: Profile): boolean {
   if (profile.disabilities.some((d) => d === 'blind' || d === 'low_vision')) return false;
   return profile.prefs.webcamAttention;
+}
+
+/** The actual gate <Eye/> must be mounted behind (roadmap task P2-09):
+ * webcamAllowed() alone is not enough — a profile with webcamAttention=true
+ * but no recorded webcam consent must still never start the camera.
+ * `consent` is null while it hasn't loaded yet, which this treats as "not
+ * granted", never as "allowed by default". */
+export function canUseWebcam(profile: Profile, consent: Consent | null): boolean {
+  return webcamAllowed(profile) && !!consent?.webcam;
 }
 
 /** Applies visual prefs to the document root. Cheap, idempotent, no dependency. */

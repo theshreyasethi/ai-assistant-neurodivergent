@@ -3,12 +3,13 @@ import { useAuthState } from 'react-firebase-hooks/auth';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 
 import { auth, db } from '../services/firebase';
-import { applyPrefs, DEFAULT_PREFS, DEFAULT_PROFILE, Prefs, Profile } from '../types/profile';
+import { applyPrefs, Consent, DEFAULT_PREFS, DEFAULT_PROFILE, Prefs, Profile } from '../types/profile';
 
 /** Single source of truth for the signed-in student's accessibility profile. */
 export function useProfile() {
   const [user, authLoading] = useAuthState(auth);
   const [profile, setProfile] = useState<Profile>(DEFAULT_PROFILE);
+  const [consent, setConsent] = useState<Consent | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [gradeLevel, setGradeLevel] = useState<string | null>(null);
   const [readingDifficulty, setReadingDifficulty] = useState<string | null>(null);
@@ -18,6 +19,7 @@ export function useProfile() {
     if (authLoading) return;
     if (!user) {
       setProfile(DEFAULT_PROFILE);
+      setConsent(null);
       setLoading(false);
       return;
     }
@@ -36,6 +38,7 @@ export function useProfile() {
           prefs: { ...DEFAULT_PREFS, ...(data?.profile?.prefs ?? {}) },
         };
         setProfile(merged);
+        setConsent((data?.consent as Consent | undefined) ?? null);
         setRole(data?.role ?? 'student');
         setGradeLevel(data?.grade_level ?? null);
         setReadingDifficulty(data?.reading_difficulty ?? null);
@@ -78,6 +81,7 @@ export function useProfile() {
     gradeLevel,
     readingDifficulty,
     profile,
+    consent,
     loading: loading || authLoading,
     savePrefs,
     saveProfile,

@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { signOut } from "firebase/auth";
 import { auth } from "../services/firebase";
 import { useProfile } from "../hooks/useProfile";
+import RouteAnnouncer from "./RouteAnnouncer";
 
 const AUTH_PATHS = ["/login", "/register", "/", "/first-login"];
 
@@ -11,6 +12,18 @@ const ROLE_HOME: Record<string, string> = {
   teacher: "/teacher-dashboard",
   student: "/student-dashboard",
 };
+
+// Patent-readiness audit finding B03: first focusable element on EVERY
+// page, auth pages included — a keyboard/screen-reader user otherwise tabs
+// through the whole nav bar (when there is one) before reaching content.
+const SkipLink: React.FC = () => (
+  <a
+    href="#main-content"
+    className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[200] focus:bg-primary focus:text-on-primary focus:px-4 focus:py-2 focus:rounded-lg"
+  >
+    Skip to main content
+  </a>
+);
 
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { pathname } = useLocation();
@@ -33,7 +46,15 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const isAuthPage = AUTH_PATHS.includes(pathname);
 
   if (isAuthPage) {
-    return <div className="min-h-screen bg-surface-bright">{children}</div>;
+    return (
+      <div className="min-h-screen bg-surface-bright">
+        <SkipLink />
+        <RouteAnnouncer />
+        <main id="main-content" tabIndex={-1}>
+          {children}
+        </main>
+      </div>
+    );
   }
 
   const homePath = ROLE_HOME[role ?? ""] ?? "/student-dashboard";
@@ -45,9 +66,11 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
   return (
     <div className="min-h-screen bg-surface-bright font-body text-on-surface">
-      <nav className="fixed top-0 w-full z-50 bg-surface/70 backdrop-blur-xl border-b border-white/20 shadow-sm">
+      <SkipLink />
+      <RouteAnnouncer />
+      <nav aria-label="Primary" className="fixed top-0 w-full z-50 bg-surface/70 backdrop-blur-xl border-b border-white/20 shadow-sm">
         <div className="flex justify-between items-center px-6 py-2.5 max-w-[1440px] mx-auto">
-          <Link to={homePath} className="flex items-center gap-2">
+          <Link to={homePath} className="flex items-center gap-2" aria-current={pathname === homePath ? "page" : undefined}>
             <span className="font-heading text-xl font-bold text-primary">EduEase</span>
           </Link>
 
@@ -116,7 +139,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         </div>
       </nav>
 
-      <main className="pt-16 min-h-screen">
+      <main id="main-content" tabIndex={-1} className="pt-16 min-h-screen">
         <div className="mx-auto max-w-[1440px] px-4 md:px-12 py-6">{children}</div>
       </main>
     </div>

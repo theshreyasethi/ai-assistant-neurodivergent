@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 
 import { useProfile } from '../hooks/useProfile';
 import { NotifyEventDetail } from '../services/notify';
+import { speakOnce } from '../services/speech';
 
 /** Mount once (App.tsx). Renders notify() calls, speaking them for
  * blind/low-vision viewers and adding a vibration cue on top for deaf ones. */
@@ -24,13 +25,15 @@ const AccessibleNotification: React.FC = () => {
       const detail = (e as CustomEvent<NotifyEventDetail>).detail;
       setItems((prev) => [...prev, detail]);
 
+      // Never speak when the student runs their own screen reader — this
+      // live region already reaches them via aria-live; our own TTS on top
+      // would be a second voice talking over theirs.
       const speechWanted =
         !detail.silent &&
+        profile.prefs.voiceEngine !== 'screenReader' &&
         (profile.prefs.ttsEnabled || profile.disabilities.some((d) => d === 'blind' || d === 'low_vision'));
-      if (speechWanted && 'speechSynthesis' in window) {
-        const u = new SpeechSynthesisUtterance(detail.speak);
-        u.rate = profile.prefs.ttsRate || 1;
-        window.speechSynthesis.speak(u);
+      if (speechWanted) {
+        speakOnce(detail.speak, { rate: profile.prefs.ttsRate || 1 });
       }
 
       timers.current[detail.id] = setTimeout(() => {
@@ -43,11 +46,14 @@ const AccessibleNotification: React.FC = () => {
     return () => window.removeEventListener('app:notify', onNotify);
   }, [profile]);
 
-  if (!items.length) return null;
-
+  // The live-region container stays mounted (with role/aria-live already
+  // present) even with zero items — many screen readers only announce
+  // content added to an aria-live region that was ALREADY in the DOM when
+  // they started watching it; a container that only appears alongside its
+  // first message can miss that very message.
   return (
     <div
-      className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 max-w-sm w-full px-4 sm:px-0"
+      className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 max-w-sm w-full px-4 sm:px-0 pointer-events-none"
       aria-live={profile.prefs.captionsAlways ? 'assertive' : 'polite'}
       aria-atomic="true"
     >
@@ -55,7 +61,7 @@ const AccessibleNotification: React.FC = () => {
         <div
           key={item.id}
           role="status"
-          className={`rounded-2xl border p-3 shadow-lg backdrop-blur-xl font-body text-sm ${
+          className={`pointer-events-auto rounded-2xl border p-3 shadow-lg backdrop-blur-xl font-body text-sm ${
             KIND_STYLE[item.kind] ?? KIND_STYLE.info
           }`}
         >
