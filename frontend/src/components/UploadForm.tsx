@@ -39,6 +39,7 @@ const UploadForm: React.FC = () => {
           grade_level: gradeLevel,
           reading_difficulty: readingDifficulty,
           images: response.data.images ?? [],
+          totalPages: response.data.totalPages ?? null,
         },
       });
     } catch (error: any) {

@@ -193,7 +193,12 @@ async def upload_pdf(
     if describeImages:
         images = await run_in_threadpool(image_describer.describe_pdf_images, pdf_reader)
 
-    return {"text": text, "chunks_ingested": chunks, "images": images}
+    # totalPages lets the frontend approximate WHERE in the reading queue an
+    # image's description belongs (image.page / totalPages -> a position in
+    # the sentence array) — the extracted `text` itself carries no
+    # page-boundary markers, so this is the only page information the
+    # client has at all. See LearningPage.tsx's image-queue placement.
+    return {"text": text, "chunks_ingested": chunks, "images": images, "totalPages": len(pdf_reader.pages)}
 
 @app.post("/simplify-text/")
 async def simplify_text(
