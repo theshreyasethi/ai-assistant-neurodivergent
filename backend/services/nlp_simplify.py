@@ -89,6 +89,39 @@ language, not English.
 - Break into small numbered steps.
 - Remove pressure language: "quickly", "you must", "obviously", "simply", "just", "easy".
 - Never imply something is obvious or that the reader should already know it.""",
+    "hard_of_hearing": """Rewrite for a hard-of-hearing student — as Deaf, but
+slightly less aggressive since some audio access remains.
+- Maximum 14 words per sentence. One idea per sentence.
+- Avoid idioms and figurative language; when a common one is unavoidable, add a
+  one-phrase plain-language gloss in brackets the first time.
+- Always subject-verb-object. Prefer active voice.
+- Number any sequence of steps.""",
+    "low_vision": """Rewrite for a student with low vision reading with magnification
+or a larger font.
+- Announce structure explicitly in words before using it: "There are three
+  parts. First... Second... Third..." — a reader scanning a large, scrolled-up
+  font benefits from the same orientation a blind listener needs.
+- Keep sentences under 18 words so a reader who can only see a few words at a
+  time doesn't lose the thread.
+- Avoid relying on colour or position words ("the box on the right") — state
+  the information itself instead.""",
+    "dysgraphia": """Rewrite for a student with dysgraphia (a writing-output
+difficulty — reading and comprehension are NOT the deficit here).
+- Favour recognition-friendly structure: short, clearly separated sentences
+  rather than dense paragraphs, since this student will often answer by
+  selecting rather than composing.
+- One idea per sentence. Active voice.
+- Keep technical terms but always gloss them in plain words the first time —
+  this student should never need to WRITE a hard word to show they understood it.""",
+    "motor": """Rewrite for a student with a motor/mobility difficulty whose
+input (typing, clicking, dwell-time) is slow or effortful, not their
+understanding.
+- Keep the text exactly as information-dense as the default rewrite — this
+  profile is about INTERACTION cost, not reading difficulty, so do not
+  over-simplify vocabulary or structure beyond the default rewrite's level.
+- Where the lesson implies an action (e.g. "try this yourself"), note that a
+  single-select or keyboard-operable alternative exists, never only a
+  drag-and-drop or precisely-timed one.""",
 }
 
 # main's per-grade word-limit table. Independent axis from PROFILES above —
@@ -119,9 +152,13 @@ PROFILE_MAX_SENTENCE: Dict[str, float] = {
     "deaf": 11.0,
     "dyslexia": 13.0,
     "dyscalculia": 14.0,
+    "hard_of_hearing": 14.0,
     "adhd": 16.0,
     "autism": 16.0,
     "anxiety": 16.0,
+    "dysgraphia": 16.0,
+    "low_vision": 18.0,
+    "motor": 20.0,
     "blind": 21.0,
     "default": 20.0,
 }

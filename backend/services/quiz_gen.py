@@ -86,6 +86,26 @@ FORMATS: Dict[str, str] = {
     "anxiety": """This student finds tests stressful.
 - Neutral, encouraging phrasing. No trick questions, no negative framing.
 - Never use "NOT", "EXCEPT" or double negatives.""",
+    "hard_of_hearing": """This student is hard of hearing and reads somewhat
+below grade level for reasons unrelated to subject understanding.
+- Keep the question stem under 16 words. Avoid idioms and figurative language.
+- Prefer questions about relationships, sequences, matching and categories.""",
+    "low_vision": """This student has low vision and reads with magnification.
+- Keep each option short (under 10 words) and easy to tell apart without
+  needing to compare fine visual detail.
+- Never reference colour, position or layout ("the diagram above").""",
+    "dysgraphia": """This student has dysgraphia — a writing-output difficulty,
+not a comprehension one.
+- Prefer mcq/true_false over fill_blank; when fill_blank is used it MUST have
+  a usable options array (never rely on free-text recall of spelling).
+- Never penalise answer phrasing — options should be unambiguous single words
+  or short phrases, not near-synonyms the student would need to compose.""",
+    "motor": """This student has a motor/mobility difficulty — selecting
+options is slow/effortful, not understanding them.
+- Prefer single-select mcq/true_false. If fill_blank is used, options MUST be
+  provided (never a type-the-answer-only item).
+- Keep the number of options at exactly 4 — no more targets to aim at than
+  necessary.""",
 }
 
 SCHEMA_HINT = """Return ONLY a JSON array of 9 objects, each exactly:
