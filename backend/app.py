@@ -599,7 +599,7 @@ from routers import analytics as dase_analytics
 from routers import admin as admin_v2
 from routers import auth_flow
 from routers import me as me_router
-from routers import evaluation, overrides, telemetry, voice_intent
+from routers import evaluation, glossary, math as math_router, nlp, overrides, telemetry, visual, voice_intent, writing
 
 app.include_router(evaluation.router, prefix="/api")
 app.include_router(telemetry.router, prefix="/api")
@@ -609,6 +609,11 @@ app.include_router(admin_v2.router, prefix="/api")
 app.include_router(auth_flow.router, prefix="/api")
 app.include_router(me_router.router, prefix="/api")
 app.include_router(overrides.router, prefix="/api")
+app.include_router(visual.router, prefix="/api")
+app.include_router(nlp.router, prefix="/api")
+app.include_router(glossary.router, prefix="/api")
+app.include_router(math_router.router, prefix="/api")
+app.include_router(writing.router, prefix="/api")
 
 from starlette.middleware.cors import CORSMiddleware
 

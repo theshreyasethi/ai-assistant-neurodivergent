@@ -16,13 +16,16 @@ from models.schemas import (
     ReadingEvent,
     SessionEnd,
     SessionStart,
+    VisualEvent,
     VoiceEvent,
 )
-from services import dase_engine
+from services import dase_engine, pacing
 
 router = APIRouter()
 
-_EVENT_TYPES = {"question": QuestionEvent, "reading": ReadingEvent, "voice": VoiceEvent}
+_EVENT_TYPES = {
+    "question": QuestionEvent, "reading": ReadingEvent, "voice": VoiceEvent, "visual": VisualEvent,
+}
 
 
 def _require_db():
@@ -84,6 +87,32 @@ def _reclassify_if_stale(session_id: str, data: dict) -> dict:
     data["classifierVersion"] = dase_engine.CLASSIFIER_VERSION
     data["configSha256"] = dase_engine.config_sha256()
     return data
+
+
+def _update_pacing(uid: str, reading_event: dict) -> None:
+    """Auto-pacing (roadmap P4-13): a reading event's own wpm feeds an
+    exponential moving average stored at pacing/{uid}, which
+    useAutoPacing.ts reads to SUGGEST (never silently apply) a rate for next
+    time. Best-effort — a failure here must never fail telemetry ingest.
+
+    Simplification: `replay_rate` here is approximated from the raw replay
+    COUNT (replays / 10, capped at 1.0) since the backend doesn't know how
+    many sentences the passage had; frontend/src/hooks/useAutoPacing.ts can
+    compute a more precise per-sentence rate client-side when it has one.
+    """
+    words, elapsed = reading_event.get("wordsRead") or 0, reading_event.get("elapsedMs") or 0
+    observed = pacing.observed_wpm(words, elapsed)
+    if observed is None:
+        return
+    try:
+        doc_ref = db.collection("pacing").document(uid)
+        current = doc_ref.get()
+        previous_wpm = (current.to_dict() or {}).get("wpm", pacing.DEFAULT_WPM) if current.exists else pacing.DEFAULT_WPM
+        replay_rate = min((reading_event.get("replays") or 0) / 10.0, 1.0)
+        new_wpm = pacing.next_wpm(previous_wpm, observed, replay_rate)
+        doc_ref.set({"wpm": new_wpm, "updatedAt": admin_firestore.SERVER_TIMESTAMP}, merge=True)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[telemetry] pacing update failed: {exc}")
 
 
 @router.post("/sessions")
@@ -151,6 +180,8 @@ async def ingest_events(batch: EventBatch, _user: dict = Depends(require_active_
         # serverTs is the trustworthy clock — client `ts` is kept but never used for analysis.
         data["serverTs"] = admin_firestore.SERVER_TIMESTAMP
         data = _reclassify_if_stale(event.sessionId, data)
+        if data.get("type") == "reading":
+            _update_pacing(uid, data)
         ref = (
             db.collection("sessions")
             .document(event.sessionId)
@@ -175,6 +206,16 @@ async def end_session(session_id: str, payload: SessionEnd, _user: dict = Depend
         {"summary": payload.summary.model_dump(), "endedAt": admin_firestore.SERVER_TIMESTAMP}
     )
     return {"status": "ok"}
+
+
+@router.get("/pacing")
+async def get_pacing(user: dict = Depends(require_active_user)):
+    """The caller's own suggested reading rate (roadmap P4-13) — never
+    anyone else's; there is no {uid} path param here on purpose."""
+    _require_db()
+    doc = db.collection("pacing").document(user.get("uid", "")).get()
+    wpm = (doc.to_dict() or {}).get("wpm", pacing.DEFAULT_WPM) if doc.exists else pacing.DEFAULT_WPM
+    return {"wpm": wpm}
 
 
 @router.get("/sessions/{session_id}/events")

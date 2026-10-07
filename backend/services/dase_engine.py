@@ -32,6 +32,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
+from services import hesitation
+
 _CONFIG_PATH = Path(__file__).resolve().parent.parent / "data" / "dase_profiles.json"
 
 # Enough prior responses for a personal median to mean anything. Below this the
@@ -430,51 +432,55 @@ def _pattern(answered: List[dict]) -> Optional[float]:
     return sum(bool(e.get("correct")) for e in items) / len(items)
 
 
-def _hesitation_index(
-    *,
-    latency_ratio: Optional[float],
-    mean_answer_changes: Optional[float],
-    blur_per_question: Optional[float] = None,
-    chat_frustration: Optional[float] = None,
+def _resil(
+    answered: List[dict], baseline_ms: Optional[float], chat_frustration: Optional[float] = None,
 ) -> Optional[float]:
-    """HES: an interaction-only hesitation signal — never facial inference,
-    never a clinical label (docs/ROADMAP.md explicitly rejects inferring
-    anxiety from face landmarks). RESIL = 1 - HES is what DASE actually
-    scores, so "higher is better" matches RESIL's positive weight the way it
-    never did for the parameter it replaces (FRUST, named for the thing to
-    minimise but weighted as if higher were good).
-
-    PARTIAL for now: the full index (roadmap P4-15) also combines a tab-blur
-    count and the chatbot's mean per-turn frustration_score, neither of which
-    exists yet (no blur telemetry, no persisted chat sentiment). Until then
-    this blends only the two signals already available — latency vs the
-    student's own baseline, and how often they changed an answer — and
-    renormalizes its weights over whichever inputs are actually present,
-    the same renormalization discipline compute_dase() applies to the
-    composite itself. A session with neither signal returns None.
+    """RESIL = 1 - HES. HES itself (services/hesitation.py) is an
+    interaction-only signal — never facial inference, never a clinical
+    label. This function's job is just gathering this session's inputs for
+    it: latency vs the student's own baseline, how often an answer was
+    changed, tab-blur count per question, and the session's mean chatbot
+    frustration score (roadmap P4-14, completing the partial version from
+    Phase 3 which had neither blur nor chat-sentiment data available yet).
     """
-    parts: List[tuple] = []
-    if latency_ratio is not None:
-        parts.append((0.30, _clamp((latency_ratio - 1.0) / 2.0)))  # 1x -> 0, >=3x -> 1
-    if mean_answer_changes is not None:
-        parts.append((0.25, _clamp(mean_answer_changes / 3.0)))
-    if blur_per_question is not None:
-        parts.append((0.20, _clamp(blur_per_question)))
-    if chat_frustration is not None:
-        parts.append((0.25, _clamp(chat_frustration)))
-    if not parts:
-        return None
-    total_w = sum(w for w, _ in parts)
-    return _clamp(sum(w * v for w, v in parts) / total_w)
-
-
-def _resil(answered: List[dict], baseline_ms: Optional[float]) -> Optional[float]:
     times = [e.get("timeMs") for e in answered if e.get("timeMs")]
     latency_ratio = (_safe_mean(times) or 0.0) / baseline_ms if baseline_ms and times else None
     changes = [float(e.get("answerChanges") or 0) for e in answered]
     mean_changes = _safe_mean(changes) if changes else None
-    hes = _hesitation_index(latency_ratio=latency_ratio, mean_answer_changes=mean_changes)
+    blur_counts = [float(e.get("blurCount") or 0) for e in answered]
+    blur_per_question = _safe_mean(blur_counts) if blur_counts else None
+
+    hes = hesitation.hesitation_index(
+        latency_ratio=latency_ratio,
+        mean_answer_changes=mean_changes,
+        blur_per_question=blur_per_question,
+        chat_frustration=chat_frustration,
+    )
     return None if hes is None else _clamp(1.0 - hes)
+
+
+MIN_WRITTEN_ITEMS = 1
+
+
+def _know(answered: List[dict]) -> Optional[float]:
+    """Mean KNOW (concept coverage) over short-answer items that carry it —
+    services/writing_score.py's deterministic aggregation, already computed
+    at grading time; this just averages across however many such items this
+    session had."""
+    values = [e.get("know") for e in answered if e.get("know") is not None]
+    if len(values) < MIN_WRITTEN_ITEMS:
+        return None
+    return _safe_mean(values)
+
+
+def _expr(answered: List[dict]) -> Optional[float]:
+    """Mean EXPR (written-expression rubric) — see dysgraphia's
+    diagnosticOnly entry in dase_profiles.json for why this is reported but
+    never scored under that profile."""
+    values = [e.get("expr") for e in answered if e.get("expr") is not None]
+    if len(values) < MIN_WRITTEN_ITEMS:
+        return None
+    return _safe_mean(values)
 
 
 def _vis_eng(visual_events: List[dict]) -> Optional[float]:
@@ -505,6 +511,7 @@ def compute_parameters(
     voice_events: Optional[List[dict]] = None,
     visual_events: Optional[List[dict]] = None,
     baseline_ms: Optional[float] = None,
+    chat_frustration: Optional[float] = None,
 ) -> Dict[str, float]:
     """Derive DASE parameters from raw telemetry.
 
@@ -608,9 +615,16 @@ def compute_parameters(
     if pattern is not None:
         params["PATTERN"] = pattern
 
-    resil = _resil(answered, baseline_ms or session_median)
+    resil = _resil(answered, baseline_ms or session_median, chat_frustration)
     if resil is not None:
         params["RESIL"] = resil
+
+    know = _know(answered)
+    if know is not None:
+        params["KNOW"] = know
+    expr = _expr(answered)
+    if expr is not None:
+        params["EXPR"] = expr
 
     # ── READ_FL: reading speed relative to a 200 wpm reference, capped at 1.
     if reading_events:

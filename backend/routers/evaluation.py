@@ -80,6 +80,7 @@ def _load_session_events(session_id: str):
         [e for e in events if e.get("type") == "question"],
         [e for e in events if e.get("type") == "reading"],
         [e for e in events if e.get("type") == "voice"],
+        [e for e in events if e.get("type") == "visual"],
     )
 
 
@@ -153,10 +154,11 @@ async def evaluate(req: EvaluateRequest, _user: dict = Depends(require_active_us
     # caller, so only the session's own owner may trigger it — a mapped
     # teacher reading it is a separate, read-only concern (GET /evaluation/
     # {student_id} below), not this endpoint.
-    assert_session_access(req.sessionId, _user, write=True)
+    session_data = assert_session_access(req.sessionId, _user, write=True)
+    chat_frustration = (session_data.get("summary") or {}).get("meanChatFrustration")
 
-    questions, readings, voices = _load_session_events(req.sessionId)
-    if not questions and not readings and not voices:
+    questions, readings, voices, visuals = _load_session_events(req.sessionId)
+    if not questions and not readings and not voices and not visuals:
         raise HTTPException(status_code=404, detail="No events found for this session")
 
     profile = _scoring_profile(_user)
@@ -165,7 +167,8 @@ async def evaluate(req: EvaluateRequest, _user: dict = Depends(require_active_us
     baseline = baselines.baseline_ms(db, student_id)
 
     parameters = dase_engine.compute_parameters(
-        questions, readings, sessions, voices, baseline_ms=baseline,
+        questions, readings, sessions, voices, visual_events=visuals,
+        baseline_ms=baseline, chat_frustration=chat_frustration,
     )
     result = dase_engine.compute_dase(parameters, profile, override_weights=override_weights)
     result["errorBreakdown"] = dase_engine.error_breakdown(questions)

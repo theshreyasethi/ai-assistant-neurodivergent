@@ -35,9 +35,10 @@
     "VOICE_Q": "PHASE 3 — quality of spoken responses",
     "NAV_EFF": "PHASE 3 — navigation efficiency for screen-reader/voice users",
     "PATTERN": "Accuracy on sequence/category/matching items (quiz_gen itemKind), ≥3 such items",
-    "RESIL": "1 − HES (interaction-only hesitation index: latency vs personal baseline + answer changes; tab-blur and chat-sentiment inputs land in P4-15). Renamed from FRUST so higher-is-better matches its positive weight",
+    "RESIL": "1 − HES (interaction-only hesitation index: latency vs personal baseline, answer changes, tab-blur count, mean chatbot frustration_score — services/hesitation.py, P4-14). Renamed from FRUST so higher-is-better matches its positive weight",
     "VIS_ENG": "PHASE 4 (P4-01) — engagement with visual content (diagram dwell, card expansions, replays). Defined; data source not yet built",
-    "WRIT_EXP": "diagnosticOnly under dysgraphia pending P4-10's KNOW/EXPR split — no computation source yet"
+    "KNOW": "PHASE 4 (P4-10) — concept coverage on short-answer items (services/writing_score.py), evidenced by a verbatim quote deterministically checked against the student's own answer",
+    "EXPR": "PHASE 4 (P4-10) — written-expression rubric (organisation/completeness/mechanics) on short-answer items. diagnosticOnly under dysgraphia: a more severe form of the condition mechanically depresses this regardless of how much the student learned"
   },
   "attentionLapseCredit": 0.75,
   "representThreshold": 0.45,
@@ -170,17 +171,18 @@
       ]
     },
     "dysgraphia": {
-      "rationale": "Written output under-represents knowledge. Until WRIT_EXP is split into KNOW (scored) and EXPR (Phase 4, P4-10), weight comprehension and effort, and report WRIT_EXP diagnostic-only: a more severe form of dysgraphia would mechanically lower written-expression quality independent of how much the student learned, so it must not be scored even once a computation source exists.",
+      "rationale": "Written output under-represents knowledge, so KNOW (concept coverage on short-answer items) is scored directly — it only credits ideas evidenced by a verbatim quote from the student's own answer, never penalised for spelling/mechanics. EXPR (organisation/completeness/mechanics) is reported but diagnostic-only: a more severe form of dysgraphia mechanically lowers written-expression quality independent of how much the student learned, so scoring it would penalise the student for having the condition (P4-10).",
       "weights": {
-        "ACC": 0.2,
-        "COMP": 0.2,
-        "EFFORT": 0.2,
-        "LRN_VEL": 0.15,
-        "WRIT_EXP": 0.15,
-        "TIME_EFF": 0.1
+        "ACC": 0.1818,
+        "COMP": 0.1818,
+        "EFFORT": 0.1818,
+        "LRN_VEL": 0.1364,
+        "KNOW": 0.1364,
+        "TIME_EFF": 0.0909,
+        "EXPR": 0.0909
       },
       "diagnosticOnly": [
-        "WRIT_EXP"
+        "EXPR"
       ]
     },
     "anxiety": {

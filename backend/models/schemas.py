@@ -133,6 +133,18 @@ class QuestionEvent(EventBase):
     # reviewed for quality, excluded from DASE scoring entirely (P3-11).
     degraded: bool = False
 
+    # PHASE 4 (P4-10) — short_answer items only, from services/writing_score.py.
+    # KNOW (scored for dysgraphia) and EXPR (diagnosticOnly for dysgraphia:
+    # a more severe form of the condition mechanically depresses written
+    # expression independent of how much the student learned).
+    know: Optional[float] = None
+    expr: Optional[float] = None
+
+    # PHASE 4 (P4-14) — tab-blur count while this question was on screen, one
+    # of HES's interaction-only inputs (services/hesitation.py). Never
+    # facial/webcam data.
+    blurCount: int = 0
+
 
 class ReadingEvent(EventBase):
     type: Literal["reading"] = "reading"
@@ -163,6 +175,18 @@ class VoiceEvent(EventBase):
     route: Optional[str] = None
 
 
+class VisualEvent(EventBase):
+    """PHASE 4 (P4-01) — feeds VIS_ENG. Emitted by VisualSummary.tsx on
+    diagram dwell >=3s, a concept-card expansion, or a diagram replay."""
+
+    type: Literal["visual"] = "visual"
+    contentId: Optional[str] = None
+    conceptTitle: Optional[str] = None
+    dwellMs: int = 0
+    expanded: bool = False
+    replayed: bool = False
+
+
 class EventBatch(BaseModel):
     events: List[dict] = Field(default_factory=list, max_length=100)
 
@@ -179,6 +203,10 @@ class SessionSummary(BaseModel):
     totalTimeMs: int = 0
     completed: bool = False
     meanFocusRatio: Optional[float] = None
+    # PHASE 4 (P4-14) — mean chatbot frustration_score across this session's
+    # turns, one of HES's interaction-only inputs. None when the chatbot was
+    # never opened this session.
+    meanChatFrustration: Optional[float] = None
 
 
 class SessionEnd(BaseModel):
