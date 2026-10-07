@@ -12,6 +12,7 @@ on an explicit "Show visual summary" click, not automatically on page load —
 see VisualSummary.tsx.
 """
 
+import re
 from typing import Any, Dict, List
 
 from services.cache import get_or_compute, make_key
@@ -57,14 +58,41 @@ def _valid_node_id(node_id: str) -> bool:
     return bool(node_id) and all(c.isalnum() for c in node_id)
 
 
+# Mermaid supports interactive callbacks (click NodeId call someFn()) and raw
+# HTML in labels — both are an XSS surface if a prompt-injected lesson text
+# ever convinces the model to emit one. securityLevel:"strict" on the
+# frontend's renderer is the second line of defense; this is the first, and
+# must reject the diagram outright rather than try to strip the dangerous
+# part out of an otherwise-trusted string.
+_DANGEROUS_SUBSTRINGS = ("click", "href", "javascript:", "callback", "<", "onerror", "onclick")
+
+
 def _sanitize_diagram(diagram: str) -> str:
-    """Reject anything that doesn't look like Mermaid flowchart syntax rather
-    than rendering arbitrary text as a diagram and confusing the student."""
+    """Reject anything that doesn't look like safe Mermaid flowchart syntax
+    rather than rendering arbitrary text as a diagram and confusing the
+    student — or, worse, rendering an interactive callback."""
     lines = [ln.strip() for ln in diagram.strip().splitlines() if ln.strip()]
     if not lines or not lines[0].lower().startswith(("flowchart", "graph", "mindmap")):
         raise ValueError("diagram does not start with a recognised Mermaid directive")
     if len(lines) > 40:  # a real 10-node diagram is nowhere near this; catches runaway output
         raise ValueError("diagram implausibly long, likely malformed output")
+
+    for line in lines[1:]:
+        lowered = line.lower()
+        if any(bad in lowered for bad in _DANGEROUS_SUBSTRINGS):
+            raise ValueError(f"diagram line contains a disallowed token: {line!r}")
+        # Each side of an arrow is a node reference: a leading identifier,
+        # optionally followed by a [Label]/(Label)/{Label}. Only the
+        # identifier itself needs to be a valid node id — the label's
+        # CONTENT is free text already covered by the dangerous-substring
+        # check above, so this only extracts the leading token on each side,
+        # never tries to tokenize the whole line word-by-word (which breaks
+        # on multi-word labels).
+        for side in re.split(r"-->|---", line):
+            match = re.match(r"\s*([A-Za-z0-9_]+)", side)
+            if match and not _valid_node_id(match.group(1)):
+                raise ValueError(f"invalid node id: {match.group(1)!r}")
+
     return "\n".join(lines)
 
 
