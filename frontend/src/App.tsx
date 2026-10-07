@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import TeacherDashboardPage from './pages/TeacherDashboardPage';
+import AuditLogPage from './pages/AuditLogPage';
 import AdminDashboardPage from './pages/AdminDashboardPage';
 import UploadPage from './pages/UploadPage';
 import LearningPage from './pages/LearningPage';
@@ -123,6 +124,14 @@ const App: React.FC = () => {
             element={
               <RoleGate expectedRole="teacher">
                 <TeacherDashboardPage />
+              </RoleGate>
+            }
+          />
+          <Route
+            path="/audit-log"
+            element={
+              <RoleGate expectedRole="teacher">
+                <AuditLogPage />
               </RoleGate>
             }
           />
