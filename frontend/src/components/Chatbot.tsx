@@ -6,6 +6,7 @@ import { scoringProfile } from '../types/profile';
 import { earcon } from '../services/earcons';
 import { speakOnce, stopSpeaking } from '../services/speech';
 import { isSttSupported, listenOnce } from '../services/stt';
+import { recordChatFrustration } from '../services/telemetry';
 import type { Sentiment } from './Eye';
 
 interface Message {
@@ -88,7 +89,14 @@ const Chatbot: React.FC<ChatbotProps> = ({ onSentiment, gradeLevel, readingDiffi
       });
       const reply = response.data?.response || response.data?.reply || "I'm not sure how to respond to that.";
       setMessages((prev) => [...prev, { text: reply, sender: 'bot' }]);
-      if (response.data?.sentiment && onSentiment) onSentiment(response.data.sentiment);
+      if (response.data?.sentiment) {
+        if (onSentiment) onSentiment(response.data.sentiment);
+        // Persisted per-session (roadmap P4-14) — one of HES's
+        // interaction-only hesitation inputs, read back at quiz-end time.
+        if (typeof response.data.sentiment.frustration_score === 'number') {
+          recordChatFrustration(response.data.sentiment.frustration_score);
+        }
+      }
       if (profile.prefs.voiceFirst || profile.prefs.ttsEnabled) {
         speakOnce(reply, { rate: profile.prefs.ttsRate || 1, lang: profile.prefs.speechLang });
       }

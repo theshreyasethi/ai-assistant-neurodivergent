@@ -52,6 +52,34 @@ html.reduce-motion *::after {
   scroll-behavior: auto !important;
 }
 
+/* Calm mode (roadmap P4-12): neutral palette (no red for errors — a wrong
+   quiz answer gets a neutral grey, never a red flash), larger spacing, and
+   zero motion. QuizPage.tsx is responsible for not rendering a running
+   score, red indicators or a countdown at all under [data-calm]; this file
+   only handles the colour/spacing/motion override for whatever markup IS
+   still rendered. */
+html[data-calm="true"] .text-error,
+html[data-calm="true"] .text-on-error-container {
+  color: #4a5568 !important;
+}
+html[data-calm="true"] .bg-error-container,
+html[data-calm="true"] .bg-error {
+  background-color: #eef1f6 !important;
+}
+html[data-calm="true"] .border-error {
+  border-color: #9aa5b1 !important;
+}
+html[data-calm="true"] .glass-card {
+  padding: 1.5rem !important;
+}
+html[data-calm="true"] *,
+html[data-calm="true"] *::before,
+html[data-calm="true"] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+}
+
 @layer utilities {
   .glass-card {
     background: rgba(255, 255, 255, 0.7);

@@ -9,7 +9,17 @@ import { earcon } from "../services/earcons";
 import { speakOnce } from "../services/speech";
 import { useVoiceCommand } from "../hooks/useVoiceCommand";
 import { useQuestionTelemetry } from "../hooks/useQuestionTelemetry";
-import { endSession, FocusMeter, setCurrentSession, startSession, track, triggerEvaluation } from "../services/telemetry";
+import { useIntervention } from "../hooks/useIntervention";
+import { endSession, FocusMeter, getMeanChatFrustration, setCurrentSession, startSession, track, triggerEvaluation } from "../services/telemetry";
+import { matchAnswer } from "../utils/matchAnswer";
+import ManipulativePanel from "../components/math/ManipulativePanel";
+import StepPlayer from "../components/math/StepPlayer";
+import MicroBlockRunner, { DEFAULT_BLOCK_SIZE } from "../components/quiz/MicroBlockRunner";
+
+// Profiles where a spelling slip must not read as a knowledge gap — fuzzy +
+// phonetic matching (roadmap P4-11) applies only here, never silently for
+// everyone (a typo IS meaningful signal for other profiles).
+const FUZZY_MATCH_PROFILES = new Set(["dyslexia", "dysgraphia"]);
 
 interface Question {
   questionId?: string;
@@ -63,6 +73,10 @@ const QuizPage: React.FC = () => {
   // QuestionEvent so the engine excludes these items from DASE entirely
   // (roadmap P3-11).
   const [quizDegraded, setQuizDegraded] = useState(false);
+  // Micro-block pause point (roadmap P4-12): shown INSTEAD of the next
+  // question when a block boundary is crossed; null means "not paused".
+  const [blockPauseAt, setBlockPauseAt] = useState<number | null>(null);
+  const { reportQuestionSignals } = useIntervention();
 
   const MAX_QUESTIONS = 10;
 
@@ -161,10 +175,13 @@ const QuizPage: React.FC = () => {
     if (!userAnswer) return;
 
     const currentQ = questions[currentIndex];
-    const isCorrect =
-      currentQ.question_type === "fill_blank" && !showFillBlankOptions
-        ? userAnswer.toLowerCase() === currentQ.answer.toLowerCase()
-        : userAnswer === currentQ.answer;
+    const isFreeText = currentQ.question_type === "fill_blank" && !showFillBlankOptions;
+    const usesFuzzyMatch = isFreeText && profile.disabilities.some((d) => FUZZY_MATCH_PROFILES.has(d));
+    const isCorrect = isFreeText
+      ? usesFuzzyMatch
+        ? matchAnswer(userAnswer, currentQ.answer).matched
+        : userAnswer.toLowerCase() === currentQ.answer.toLowerCase()
+      : userAnswer === currentQ.answer;
 
     const topicLabel = currentQ.topic || currentQ.answer;
     const sig = qt.snapshot();
@@ -232,10 +249,19 @@ const QuizPage: React.FC = () => {
         classification,
         classifierVersion: null, // stamped server-side on ingest
         degraded: quizDegraded,
+        know: null,
+        expr: null,
+        blurCount: sig.blurCount,
       });
       focusMeterRef.current.reset();
     }
     if (isCorrect) priorTimesRef.current.push(sig.timeMs);
+    reportQuestionSignals({
+      answerChanges: sig.answerChanges,
+      blurCount: sig.blurCount,
+      timeMs: sig.timeMs,
+      baselineMs: priorTimesRef.current.length ? priorTimesRef.current[priorTimesRef.current.length - 1] : null,
+    });
 
     if (isCorrect) {
       setScore((prev) => prev + 1);
@@ -267,29 +293,48 @@ const QuizPage: React.FC = () => {
 
     const isFinal = currentIndex >= totalQuestions - 1;
     if (!isFinal) {
-      setCurrentIndex((prev) => prev + 1);
+      const nextIndex = currentIndex + 1;
       setSelectedAnswer(null);
       setTypedAnswer("");
-    } else {
-      const finalScore = score + (isCorrect ? 1 : 0);
-      const finalWrong = isCorrect ? wrongTopics : [...wrongTopics, topicLabel];
-      setIsQuizCompleted(true);
-      api.post("/analytics/log-quiz/", {
-        score: finalScore,
-        total_questions: totalQuestions,
-        wrong_topics: [...new Set(finalWrong)],
-      }).catch(() => {});
-
-      if (sessionIdRef.current && uid) {
-        const { focusRatio: finalFocusRatio } = focusMeterRef.current.read();
-        endSession(sessionIdRef.current, {
-          totalQuestions,
-          correct: finalScore,
-          totalTimeMs: Date.now() - quizStartRef.current,
-          completed: true,
-          meanFocusRatio: finalFocusRatio,
-        }).then(() => triggerEvaluation(sessionIdRef.current, uid, scoringProfile(profile)));
+      // Micro-block pause point (roadmap P4-12): every DEFAULT_BLOCK_SIZE
+      // questions, stop and explicitly ask rather than silently continuing —
+      // only once calm mode is on, since this is an anxiety-support feature,
+      // not a change to the default flow for everyone.
+      if (profile.prefs.calmMode && nextIndex % DEFAULT_BLOCK_SIZE === 0) {
+        setBlockPauseAt(nextIndex);
+      } else {
+        setCurrentIndex(nextIndex);
       }
+    } else {
+      finishQuiz(totalQuestions, score + (isCorrect ? 1 : 0), isCorrect ? wrongTopics : [...wrongTopics, topicLabel]);
+    }
+  };
+
+  /** Shared by the normal end-of-quiz path and MicroBlockRunner's "stop
+   * here" — stopping early is tracked as a COMPLETED block, never an
+   * abandoned session (roadmap P4-12: anxiety support means stopping must
+   * never look like failure). `attemptedCount` may be less than the full
+   * question count when stopping early. */
+  const finishQuiz = (attemptedCount: number, finalScore: number, finalWrong: string[]) => {
+    setScore(finalScore);
+    setWrongTopics(finalWrong);
+    setIsQuizCompleted(true);
+    api.post("/analytics/log-quiz/", {
+      score: finalScore,
+      total_questions: attemptedCount,
+      wrong_topics: [...new Set(finalWrong)],
+    }).catch(() => {});
+
+    if (sessionIdRef.current && uid) {
+      const { focusRatio: finalFocusRatio } = focusMeterRef.current.read();
+      endSession(sessionIdRef.current, {
+        totalQuestions: attemptedCount,
+        correct: finalScore,
+        totalTimeMs: Date.now() - quizStartRef.current,
+        completed: true,
+        meanFocusRatio: finalFocusRatio,
+        meanChatFrustration: getMeanChatFrustration(),
+      }).then(() => triggerEvaluation(sessionIdRef.current, uid, scoringProfile(profile)));
     }
   };
 
@@ -300,6 +345,7 @@ const QuizPage: React.FC = () => {
     setSelectedAnswer(null);
     setTypedAnswer("");
     setIsQuizCompleted(false);
+    setBlockPauseAt(null);
     representedRef.current.clear();
     priorTimesRef.current = [];
   };
@@ -340,6 +386,28 @@ const QuizPage: React.FC = () => {
     );
   }
 
+  if (blockPauseAt !== null) {
+    return (
+      <div className="max-w-[1400px] mx-auto px-4 md:px-12 py-8 animate-fade-in">
+        <MicroBlockRunner
+          blockNumber={Math.ceil(blockPauseAt / DEFAULT_BLOCK_SIZE)}
+          onContinue={() => {
+            setCurrentIndex(blockPauseAt);
+            setBlockPauseAt(null);
+          }}
+          onBreak={() => {
+            // Same as Continue for now — a longer pause is just the student
+            // not clicking "Continue" right away; nothing time-based forces
+            // them back in (roadmap P4-12: never a countdown).
+            setCurrentIndex(blockPauseAt);
+            setBlockPauseAt(null);
+          }}
+          onStopHere={() => finishQuiz(blockPauseAt, score, wrongTopics)}
+        />
+      </div>
+    );
+  }
+
   if (isQuizCompleted) {
     const uniqueWeakAreas = [...new Set(wrongTopics)];
     const pct = totalQuestions > 0 ? Math.round((score / totalQuestions) * 100) : 0;
@@ -349,44 +417,62 @@ const QuizPage: React.FC = () => {
     return (
       <div className="max-w-[1400px] mx-auto px-4 md:px-12 py-8 animate-fade-in">
         <div className="bento-grid">
-          {/* Score Card */}
-          <div className="col-span-12 md:col-span-4 glass-card rounded-3xl p-8 flex flex-col items-center text-center">
-            <h3 className="font-heading text-xl font-semibold text-on-surface mb-6">Quiz Performance</h3>
-            <div className="relative w-40 h-40 mb-6">
-              <svg className="w-full h-full" viewBox="0 0 100 100" style={{transform: "rotate(-90deg)"}}>
-                <circle cx="50" cy="50" r="45" fill="transparent" stroke="#e5eeff" strokeWidth="8" />
-                <circle cx="50" cy="50" r="45" fill="transparent" stroke="#2a14b4" strokeWidth="8"
-                  strokeLinecap="round" strokeDasharray={circumference} strokeDashoffset={offset}
-                  style={{transition: "stroke-dashoffset 1s ease-out"}} />
-              </svg>
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="font-heading text-4xl font-bold text-primary">{pct}%</span>
-              </div>
+          {profile.prefs.calmMode ? (
+            /* Calm mode (roadmap P4-12): no running score, no red "Missed"
+               indicator, no percentage ring — a qualitative, encouraging
+               summary instead. The underlying score is still computed and
+               sent to DASE exactly as normal; only this display changes. */
+            <div className="col-span-12 glass-card rounded-3xl p-10 text-center">
+              <span className="material-symbols-outlined text-primary text-5xl mb-3 block" aria-hidden="true">celebration</span>
+              <p className="font-heading text-2xl font-semibold text-on-surface">
+                You finished the quiz — nice work sticking with it!
+              </p>
+              <p className="text-on-surface-variant font-body mt-2">
+                You answered {totalQuestions} question{totalQuestions === 1 ? '' : 's'}.
+              </p>
             </div>
-            <p className="text-base text-on-surface-variant font-body">{score}/{totalQuestions} correct answers</p>
-          </div>
+          ) : (
+            <>
+              {/* Score Card */}
+              <div className="col-span-12 md:col-span-4 glass-card rounded-3xl p-8 flex flex-col items-center text-center">
+                <h3 className="font-heading text-xl font-semibold text-on-surface mb-6">Quiz Performance</h3>
+                <div className="relative w-40 h-40 mb-6">
+                  <svg className="w-full h-full" viewBox="0 0 100 100" style={{transform: "rotate(-90deg)"}}>
+                    <circle cx="50" cy="50" r="45" fill="transparent" stroke="#e5eeff" strokeWidth="8" />
+                    <circle cx="50" cy="50" r="45" fill="transparent" stroke="#2a14b4" strokeWidth="8"
+                      strokeLinecap="round" strokeDasharray={circumference} strokeDashoffset={offset}
+                      style={{transition: "stroke-dashoffset 1s ease-out"}} />
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="font-heading text-4xl font-bold text-primary">{pct}%</span>
+                  </div>
+                </div>
+                <p className="text-base text-on-surface-variant font-body">{score}/{totalQuestions} correct answers</p>
+              </div>
 
-          {/* Metrics */}
-          <div className="col-span-12 md:col-span-8 glass-card rounded-3xl p-8">
-            <h3 className="font-heading text-xl font-semibold text-on-surface mb-6">Session Summary</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-surface-container-low p-4 rounded-2xl">
-                <span className="material-symbols-outlined text-primary mb-2 block">check_circle</span>
-                <p className="text-xs text-on-surface-variant uppercase tracking-wider font-heading font-semibold">Correct</p>
-                <p className="font-heading text-2xl font-bold text-on-surface">{score}</p>
+              {/* Metrics */}
+              <div className="col-span-12 md:col-span-8 glass-card rounded-3xl p-8">
+                <h3 className="font-heading text-xl font-semibold text-on-surface mb-6">Session Summary</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-surface-container-low p-4 rounded-2xl">
+                    <span className="material-symbols-outlined text-primary mb-2 block">check_circle</span>
+                    <p className="text-xs text-on-surface-variant uppercase tracking-wider font-heading font-semibold">Correct</p>
+                    <p className="font-heading text-2xl font-bold text-on-surface">{score}</p>
+                  </div>
+                  <div className="bg-surface-container-low p-4 rounded-2xl">
+                    <span className="material-symbols-outlined text-error mb-2 block">cancel</span>
+                    <p className="text-xs text-on-surface-variant uppercase tracking-wider font-heading font-semibold">Missed</p>
+                    <p className="font-heading text-2xl font-bold text-on-surface">{totalQuestions - score}</p>
+                  </div>
+                  <div className="bg-surface-container-low p-4 rounded-2xl">
+                    <span className="material-symbols-outlined text-tertiary-fixed-dim mb-2 block">quiz</span>
+                    <p className="text-xs text-on-surface-variant uppercase tracking-wider font-heading font-semibold">Total</p>
+                    <p className="font-heading text-2xl font-bold text-on-surface">{totalQuestions}</p>
+                  </div>
+                </div>
               </div>
-              <div className="bg-surface-container-low p-4 rounded-2xl">
-                <span className="material-symbols-outlined text-error mb-2 block">cancel</span>
-                <p className="text-xs text-on-surface-variant uppercase tracking-wider font-heading font-semibold">Missed</p>
-                <p className="font-heading text-2xl font-bold text-on-surface">{totalQuestions - score}</p>
-              </div>
-              <div className="bg-surface-container-low p-4 rounded-2xl">
-                <span className="material-symbols-outlined text-tertiary-fixed-dim mb-2 block">quiz</span>
-                <p className="text-xs text-on-surface-variant uppercase tracking-wider font-heading font-semibold">Total</p>
-                <p className="font-heading text-2xl font-bold text-on-surface">{totalQuestions}</p>
-              </div>
-            </div>
-          </div>
+            </>
+          )}
 
           {/* Focus Areas */}
           {uniqueWeakAreas.length > 0 && (
@@ -443,6 +529,13 @@ const QuizPage: React.FC = () => {
   const progressOffset = progressCircumference - (progress / 100) * progressCircumference;
   const webcamOn = canUseWebcam(profile, consent);
 
+  // Dyscalculia manipulatives (roadmap P4-06/P4-08) — only for numeric
+  // fill_blank items, and only alongside the normal answer controls, never
+  // replacing them.
+  const isDyscalculia = profile.disabilities.includes("dyscalculia");
+  const isNumericFillBlank = qType === "fill_blank" && !showFillBlankOptions && /^-?\d+(\.\d+)?$/.test(currentQuestion.answer.trim());
+  const showMathSupport = isDyscalculia && isNumericFillBlank;
+
   return (
     <div className="max-w-[1400px] mx-auto px-4 md:px-12 py-8 animate-fade-in">
       {/* Header */}
@@ -486,6 +579,17 @@ const QuizPage: React.FC = () => {
           onSubmit={handleSubmit}
           showOptionsForFillBlank={showFillBlankOptions}
         />
+
+        {showMathSupport && (
+          <div className="col-span-12 md:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-3">
+            <ManipulativePanel
+              kind="numberline"
+              max={Math.max(20, Math.abs(Number(currentQuestion.answer)) + 5)}
+              onValueChange={(v) => { qt.onInteract(); setTypedAnswer(String(v)); }}
+            />
+            <StepPlayer problem={currentQuestion.question.replace(/______/g, "?")} onReplay={() => qt.onReplayQuestion()} />
+          </div>
+        )}
 
         {/* Side: Topic + Progress */}
         <div className="col-span-12 md:col-span-4 flex flex-col gap-4">

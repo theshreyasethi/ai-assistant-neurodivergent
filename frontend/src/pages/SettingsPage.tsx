@@ -134,6 +134,28 @@ const SettingsPage: React.FC = () => {
 
       <section className="glass-card rounded-[2rem] p-6">
         <h2 className="text-xs font-heading font-semibold text-on-surface-variant uppercase tracking-wider mb-2">
+          Calm &amp; focus
+        </h2>
+        <div className="divide-y divide-outline-variant/40">
+          <Toggle
+            icon="spa"
+            label="Calm mode"
+            description="Neutral colors (no red for mistakes), no running score, and no countdowns while you work."
+            checked={profile.prefs.calmMode}
+            onChange={(v) => void set('calmMode', { calmMode: v })}
+          />
+          <Toggle
+            icon="timer_off"
+            label="Untimed"
+            description="No clocks, ever. Take as long as you need on every question."
+            checked={profile.prefs.untimed}
+            onChange={(v) => void set('untimed', { untimed: v })}
+          />
+        </div>
+      </section>
+
+      <section className="glass-card rounded-[2rem] p-6">
+        <h2 className="text-xs font-heading font-semibold text-on-surface-variant uppercase tracking-wider mb-2">
           Voice &amp; sound
         </h2>
         <div className="divide-y divide-outline-variant/40">

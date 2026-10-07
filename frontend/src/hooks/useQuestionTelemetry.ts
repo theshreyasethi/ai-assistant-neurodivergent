@@ -6,6 +6,10 @@ export interface QuestionTelemetrySnapshot {
   answerChanges: number;
   reRead: boolean;
   revisits: number;
+  /** PHASE 4 (P4-14) — tab-blur count while this question was on screen, one
+   * of HES's interaction-only inputs (services/hesitation.py). Never
+   * facial/webcam data — just whether the tab lost visibility. */
+  blurCount: number;
 }
 
 /**
@@ -20,6 +24,7 @@ export function useQuestionTelemetry(questionId: string) {
   const changes = useRef(0);
   const replays = useRef(0);
   const revisits = useRef(0);
+  const blurs = useRef(0);
   const last = useRef<string | null>(null);
 
   useEffect(() => {
@@ -28,9 +33,18 @@ export function useQuestionTelemetry(questionId: string) {
     changes.current = 0;
     replays.current = 0;
     revisits.current = 0;
+    blurs.current = 0;
     last.current = null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [questionId]);
+
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.hidden) blurs.current += 1;
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, []);
 
   return {
     /** First pointer/key/voice event after the question rendered. */
@@ -59,6 +73,7 @@ export function useQuestionTelemetry(questionId: string) {
       answerChanges: changes.current,
       reRead: replays.current > 0,
       revisits: revisits.current,
+      blurCount: blurs.current,
     }),
   };
 }

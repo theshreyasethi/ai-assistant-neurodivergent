@@ -55,6 +55,13 @@ export interface Prefs {
    * SpeechRecognition — kept separate from the UI's i18n language since a
    * student may read the UI in one language and want speech in another. */
   speechLang: string;
+  /** Anxiety support (roadmap P4-12): neutral palette (no red for errors),
+   * larger spacing, zero motion, no running score/countdown visible during
+   * a quiz — applied via the `data-calm` attribute on <html>. */
+  calmMode: boolean;
+  /** No clocks, no timedOut telemetry — PROCESSING_DELAY derives from ratio
+   * only. Independent of calmMode: a student can want one without the other. */
+  untimed: boolean;
 }
 
 export interface Profile {
@@ -87,6 +94,8 @@ export const DEFAULT_PREFS: Prefs = {
   voiceFirst: false,
   voiceEngine: 'app',
   speechLang: 'en-US',
+  calmMode: false,
+  untimed: false,
 };
 
 export const DEFAULT_PROFILE: Profile = {
@@ -123,4 +132,6 @@ export function applyPrefs(prefs: Prefs): void {
   root.classList.toggle('high-contrast', prefs.highContrast);
   root.classList.toggle('dyslexia-font', prefs.dyslexiaFont);
   root.classList.toggle('reduce-motion', prefs.reduceMotion);
+  if (prefs.calmMode) root.setAttribute('data-calm', 'true');
+  else root.removeAttribute('data-calm');
 }

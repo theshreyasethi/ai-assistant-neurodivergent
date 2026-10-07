@@ -4,11 +4,15 @@ import api from '../services/api';
 import Eye from '../components/Eye';
 import type { Sentiment } from '../components/Eye';
 import Chatbot from '../components/Chatbot';
+import VisualSummary from '../components/VisualSummary';
+import PosText from '../components/PosText';
+import SignGloss from '../components/SignGloss';
 import { useProfile } from '../hooks/useProfile';
 import { canUseWebcam, scoringProfile } from '../types/profile';
 import { earcon } from '../services/earcons';
 import { speakSentences, stopSpeaking } from '../services/speech';
 import { useReadingProgress } from '../hooks/useReadingProgress';
+import { useAutoPacing } from '../hooks/useAutoPacing';
 import { useVoiceCommand } from '../hooks/useVoiceCommand';
 import {
   endSession, FocusMeter, getCurrentSession, setCurrentSession, startSession, track,
@@ -95,6 +99,8 @@ const LearningPage: React.FC = () => {
 
   const [latestSentiment, setLatestSentiment] = React.useState<Sentiment | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
+  const [pacingDismissed, setPacingDismissed] = useState(false);
+  const { suggestedRate, shouldSuggestSlower } = useAutoPacing(profile.prefs.ttsRate || 1);
   const [chatSeed, setChatSeed] = useState<string | null>(null);
 
   const [contentId, setContentId] = React.useState<string | null>(routeContentId ?? null);
@@ -433,6 +439,53 @@ const LearningPage: React.FC = () => {
             </div>
             {resumed && <p className="text-xs text-on-surface-variant font-body">Resumed where you left off.</p>}
           </div>
+
+          {/* Auto-pacing suggestion (roadmap P4-13) — never applied silently. */}
+          {shouldSuggestSlower && !pacingDismissed && suggestedRate && (
+            <div role="status" className="glass-card rounded-2xl p-4 flex flex-col gap-2">
+              <p className="text-sm font-body text-on-surface">
+                Shall I read a little slower? Based on your own past sessions.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    void savePrefs({ ttsRate: Math.round(suggestedRate * 10) / 10 });
+                    setPacingDismissed(true);
+                  }}
+                  className="px-4 py-1.5 rounded-lg font-heading text-xs font-semibold bg-primary text-white"
+                >
+                  Yes, slower
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPacingDismissed(true)}
+                  className="px-4 py-1.5 rounded-lg font-heading text-xs font-semibold border border-outline text-on-surface-variant"
+                >
+                  No thanks
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Deaf/HoH visual summary (roadmap P4-01) — explicit opt-in click,
+              never generated automatically on page load. */}
+          {profile.disabilities.some((d) => d === 'deaf' || d === 'hard_of_hearing') && effectiveText && (
+            <>
+              <VisualSummary
+                text={effectiveText}
+                profile={scoringProfile(profile)}
+                studentId={uid}
+                contentId={contentId}
+              />
+              <div className="glass-card rounded-[2rem] p-5">
+                <SignGloss text={effectiveText.slice(0, 500)} />
+              </div>
+              <div className="glass-card rounded-[2rem] p-5">
+                <PosText text={effectiveText.slice(0, 1000)} />
+              </div>
+            </>
+          )}
         </div>
 
         {/* Reading Module */}
