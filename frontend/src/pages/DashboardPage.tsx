@@ -1,11 +1,46 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import Chatbot from '../components/Chatbot';
+import VoiceEssay from '../components/VoiceEssay';
+import { useProfile } from '../hooks/useProfile';
+import { scoringProfile } from '../types/profile';
+import { endSession, setCurrentSession, startSession, track, triggerEvaluation } from '../services/telemetry';
 import { useTranslation } from 'react-i18next';
 
 const DashboardPage: React.FC = () => {
   const [showChatbot, setShowChatbot] = React.useState(false);
+  const [showWritingPractice, setShowWritingPractice] = React.useState(false);
   const { t, i18n } = useTranslation();
+  const { uid, profile } = useProfile();
+  const writingSessionRef = React.useRef<string | null>(null);
+
+  const openWritingPractice = async () => {
+    setShowWritingPractice(true);
+    if (uid) {
+      const id = await startSession(uid, 'quiz');
+      writingSessionRef.current = id;
+      if (id) setCurrentSession(id);
+    }
+  };
+
+  const onEssayScored = (result: { know: number | null; expr: number | null }) => {
+    const sessionId = writingSessionRef.current;
+    if (!sessionId || !uid) return;
+    track({
+      type: 'question', sessionId, studentId: uid, ts: Date.now(),
+      questionId: 'writing-practice', conceptId: null, topic: 'Writing practice', difficulty: 3,
+      questionType: 'short_answer', itemKind: null, selected: null,
+      correct: (result.know ?? 0) >= 0.5, timeMs: 0, timeToFirstInteractionMs: null,
+      attempts: 1, answerChanges: 0, hintsUsed: 0, revisits: 0, reRead: false,
+      focusRatio: null, focusSamples: 0, isRepresentation: false, originalQuestionId: null,
+      classification: null, classifierVersion: null, degraded: false,
+      know: result.know, expr: result.expr, blurCount: 0,
+    });
+    void endSession(sessionId, {
+      totalQuestions: 1, correct: (result.know ?? 0) >= 0.5 ? 1 : 0, totalTimeMs: 0,
+      completed: true, meanFocusRatio: null,
+    }).then(() => triggerEvaluation(sessionId, uid, scoringProfile(profile)));
+  };
 
   const changeLanguage = (lng: string) => i18n.changeLanguage(lng);
 
@@ -75,7 +110,48 @@ const DashboardPage: React.FC = () => {
             </Link>
           ))}
         </div>
+
+        {/* Dysgraphia writing practice (roadmap P4-09) — reachable entry
+            point for VoiceEssay, scoped to the profile it supports. */}
+        {profile.disabilities.includes('dysgraphia') && (
+          <button
+            type="button"
+            onClick={openWritingPractice}
+            className="w-full glass-card rounded-3xl p-6 flex items-center gap-4 text-left hover:shadow-lg transition-all"
+          >
+            <span className="material-symbols-outlined text-3xl text-primary" aria-hidden="true">mic</span>
+            <span>
+              <span className="block font-heading text-lg font-semibold text-on-surface">Practice writing by voice</span>
+              <span className="block text-sm text-on-surface-variant font-body">
+                Say your answer out loud — we'll organize it into a structured essay for you.
+              </span>
+            </span>
+          </button>
+        )}
       </div>
+
+      {showWritingPractice && (
+        <div
+          role="dialog"
+          aria-label="Writing practice"
+          className="fixed inset-0 z-[200] bg-black/40 flex items-center justify-center p-4"
+        >
+          <div className="max-w-2xl w-full max-h-[90vh] overflow-y-auto relative">
+            <button
+              type="button"
+              onClick={() => setShowWritingPractice(false)}
+              aria-label="Close writing practice"
+              className="absolute -top-3 -right-3 w-9 h-9 rounded-full bg-white shadow-lg flex items-center justify-center z-10"
+            >
+              <span className="material-symbols-outlined">close</span>
+            </button>
+            <VoiceEssay
+              prompt="Tell me about something you learned recently."
+              onScored={onEssayScored}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Chatbot FAB — rendered outside page content flow */}
       <div className="fixed bottom-4 right-4 z-[9999] flex items-end gap-3 pointer-events-auto" style={{isolation: "isolate"}}>
