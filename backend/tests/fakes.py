@@ -18,7 +18,23 @@ deliberately tested a different way.)
 
 from __future__ import annotations
 
+import itertools
 from typing import Any, Dict, Iterator, List, Optional, Tuple
+
+_timestamp_seq = itertools.count(1)
+
+
+def _resolve_server_timestamps(data: dict) -> dict:
+    """Real Firestore resolves admin_firestore.SERVER_TIMESTAMP to an actual
+    timestamp server-side before it's ever readable again. This fake stores
+    documents verbatim otherwise, so without this, reading a document back
+    (e.g. in an HTTP response body) would try to JSON-serialize the raw
+    Sentinel object and fail — a test-infrastructure gap, not a production
+    bug, but one worth closing here rather than in every test that writes
+    then reads a timestamped field."""
+    from google.cloud.firestore_v1.transforms import Sentinel
+
+    return {k: (next(_timestamp_seq) if isinstance(v, Sentinel) else v) for k, v in data.items()}
 
 
 class FakeDocSnapshot:
@@ -46,6 +62,7 @@ class FakeDocRef:
         return FakeDocSnapshot(self._doc_id, data)
 
     def set(self, data: dict, merge: bool = False) -> None:
+        data = _resolve_server_timestamps(data)
         coll = self._store.setdefault(self._collection, {})
         if merge and self._doc_id in coll:
             coll[self._doc_id] = {**coll[self._doc_id], **data}
@@ -56,6 +73,7 @@ class FakeDocRef:
         """Firestore's partial-update — distinct from .set(): merges into an
         EXISTING document and raises if it doesn't exist, rather than
         silently creating one (that's what .set() is for)."""
+        data = _resolve_server_timestamps(data)
         coll = self._store.setdefault(self._collection, {})
         if self._doc_id not in coll:
             raise KeyError(f"No document to update at {self._collection}/{self._doc_id}")
