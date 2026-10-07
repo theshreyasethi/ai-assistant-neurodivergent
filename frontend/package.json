@@ -16,6 +16,7 @@
     "firebase": "^10.9.0",
     "i18next": "^25.6.1",
     "lunr": "^2.3.9",
+    "mermaid": "^12.1.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-firebase-hooks": "^5.1.1",

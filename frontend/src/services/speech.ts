@@ -17,6 +17,8 @@
  * needs to mean for a blind user mid-utterance.
  */
 
+import { addCaption } from './captions';
+
 let token = 0;
 let audioCtx: AudioContext | null = null;
 
@@ -100,6 +102,11 @@ export function speakSentences(sentences: string[], opts: SpeakOptions = {}): ()
     const sentence = sentences[i];
     const sentenceIndex = i;
     opts.onSentenceStart?.(sentenceIndex);
+    // Every spoken utterance is captioned (roadmap P4-02) — a persistent
+    // record for a viewer who has sound off, not just the toast that
+    // triggered it (which may have a shorter `speak` than `message`, or no
+    // visible toast at all for a silent announcement).
+    addCaption(sentence);
 
     const u = new SpeechSynthesisUtterance(sentence);
     u.rate = opts.rate ?? 1;

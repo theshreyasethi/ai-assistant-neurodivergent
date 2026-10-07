@@ -57,6 +57,12 @@ export interface QuestionEvent {
   /** spaCy-fallback item (LLM unreachable): never reviewed for quality,
    * excluded from DASE scoring entirely (roadmap P3-11). */
   degraded: boolean;
+  /** PHASE 4 (P4-10) — short_answer items only, from services/writing_score.py. */
+  know: number | null;
+  expr: number | null;
+  /** PHASE 4 (P4-14) — tab-blur count while this question was on screen, one
+   * of HES's interaction-only inputs. Never facial/webcam data. */
+  blurCount: number;
 }
 
 export interface ReadingEvent {
@@ -94,7 +100,21 @@ export interface VoiceEvent {
   route: string | null;
 }
 
-export type LearningEvent = QuestionEvent | ReadingEvent | VoiceEvent;
+/** PHASE 4 (P4-01) — feeds VIS_ENG. Emitted by VisualSummary.tsx into
+ * whichever session is currently registered via setCurrentSession(). */
+export interface VisualEvent {
+  type: 'visual';
+  sessionId: string;
+  studentId: string;
+  ts: number;
+  contentId: string | null;
+  conceptTitle: string | null;
+  dwellMs: number;
+  expanded: boolean;
+  replayed: boolean;
+}
+
+export type LearningEvent = QuestionEvent | ReadingEvent | VoiceEvent | VisualEvent;
 
 const FLUSH_SIZE = 10;
 const FLUSH_MS = 5000;
@@ -109,13 +129,32 @@ let timer: ReturnType<typeof setTimeout> | null = null;
 // (the dashboard, say) simply has nowhere to attribute telemetry to, which
 // track() already handles by dropping events with no sessionId.
 let currentSessionId: string | null = null;
+// Chatbot sentiment scores for the CURRENT session (roadmap P4-14) — one of
+// HES's interaction-only inputs. Reset whenever the active session changes,
+// since a frustration score from a PREVIOUS quiz session must never bleed
+// into this one's hesitation index.
+let chatFrustrationScores: number[] = [];
 
 export function setCurrentSession(sessionId: string | null): void {
+  if (sessionId !== currentSessionId) chatFrustrationScores = [];
   currentSessionId = sessionId;
 }
 
 export function getCurrentSession(): string | null {
   return currentSessionId;
+}
+
+/** Chatbot.tsx calls this with each turn's frustration_score. */
+export function recordChatFrustration(score: number): void {
+  chatFrustrationScores.push(Math.max(0, Math.min(1, score)));
+}
+
+/** Read at quiz-end time and sent as SessionSummary.meanChatFrustration —
+ * null when the chatbot was never opened this session, never 0 (0 would
+ * read as "calm", which is a claim this has no basis to make). */
+export function getMeanChatFrustration(): number | null {
+  if (!chatFrustrationScores.length) return null;
+  return chatFrustrationScores.reduce((a, b) => a + b, 0) / chatFrustrationScores.length;
 }
 
 export async function startSession(
@@ -169,6 +208,7 @@ export async function endSession(
     totalTimeMs: number;
     completed: boolean;
     meanFocusRatio: number | null;
+    meanChatFrustration?: number | null;
   },
 ): Promise<void> {
   await flush();

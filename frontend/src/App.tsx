@@ -16,11 +16,16 @@ import Layout from './components/Layout';
 import AccessibleNotification from './components/AccessibleNotification';
 import VoiceBootstrap from './components/VoiceBootstrap';
 import VoiceNavigator from './components/VoiceNavigator';
+import VisualAlert from './components/VisualAlert';
 
 const App: React.FC = () => {
   return (
     <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <AccessibleNotification />
+      {/* Non-audio channels (border pulse, badge) + the persistent caption
+          log — additive to, not a replacement for, the toast above
+          (roadmap P4-02). */}
+      <VisualAlert />
       {/* Route-aware (useLocation), so one mount here covers every page,
           /login included — see VoiceBootstrap.tsx for why a second mount
           inside LoginPage would just duplicate the same listeners. */}
