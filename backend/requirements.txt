@@ -24,3 +24,4 @@ groq
 # dev/test only
 pytest
 httpx
+PyYAML

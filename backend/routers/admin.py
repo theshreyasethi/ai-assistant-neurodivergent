@@ -6,6 +6,7 @@
   POST  /admin/users/{uid}/disable           - disable an account
   POST  /admin/users/{uid}/enable            - re-enable an account
   POST  /admin/users/{uid}/reset-password    - issue a fresh temporary password
+  GET   /admin/dossier                       - serve the compiled patent claim-support dossier
 
 Mounted under /api in app.py, giving /api/admin/users etc. POST
 /admin/users replaces app.py's original POST /admin/create-user, which is
@@ -17,6 +18,8 @@ lifecycle routes).
 
 import csv
 import io
+import json
+from pathlib import Path
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -136,3 +139,21 @@ async def reset_user_password(uid: str, admin: dict = Depends(require_admin)):
         return accounts.admin_reset_password(uid, actor=admin.get("uid", ""))
     except accounts.AccountError as exc:
         raise _account_error_to_http(exc)
+
+
+# backend/scripts/build_dossier.py writes this file offline (verifying every
+# citation against the live repository state first) — this endpoint only
+# ever SERVES the pre-built artifact, never regenerates it synchronously
+# inside a request, which would mean running the whole test suite on every
+# dashboard load.
+_DOSSIER_PATH = Path(__file__).resolve().parent.parent.parent / "docs" / "claims" / "patent_dossier.json"
+
+
+@router.get("/dossier")
+async def get_dossier(_admin: dict = Depends(require_admin)):
+    if not _DOSSIER_PATH.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="Dossier not built yet — run `python scripts/build_dossier.py` from backend/.",
+        )
+    return json.loads(_DOSSIER_PATH.read_text(encoding="utf-8"))

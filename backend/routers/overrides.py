@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from firebase_admin import firestore as admin_firestore
 from pydantic import BaseModel, Field, field_validator
 
-from auth import require_teacher_of
+from auth import require_teacher_of, verify_role
 from firebase_config import db
 from services import dase_engine
 
@@ -41,6 +41,46 @@ class WeightOverrideRequest(BaseModel):
             if weight < 0:
                 raise ValueError(f"Weight for {name} must be non-negative")
         return value
+
+
+@router.get("/teachers/students/{student_id}/dase-weights")
+async def get_weight_override(student_id: str, _user: dict = Depends(require_teacher_of)):
+    """The CURRENT override, if any — WeightOverride.tsx reads this before
+    letting a teacher edit, so they see what's actually active rather than
+    guessing from the profile default."""
+    if db is None:
+        raise HTTPException(status_code=503, detail="Persistence unavailable")
+    doc = db.collection("dase_overrides").document(student_id).get()
+    if not doc.exists or not (doc.to_dict() or {}).get("weights"):
+        return {"studentId": student_id, "active": False, "weights": None, "reason": None}
+    data = doc.to_dict() or {}
+    return {
+        "studentId": student_id, "active": True,
+        "weights": data.get("weights"), "reason": data.get("reason"),
+        "setBy": data.get("setBy"), "updatedAt": data.get("updatedAt"),
+    }
+
+
+@router.get("/teachers/audit-log")
+async def get_my_audit_log(limit: int = 50, user: dict = Depends(verify_role("teacher"))):
+    """A teacher's own weight-override history (AuditLogPage.tsx) — scoped
+    to entries THIS teacher created. require_teacher_of already guarantees
+    only a student's own mapped teacher can ever write a dase_weights.*
+    entry targeting them, so filtering by actor==caller is equivalent to
+    "every override I've made," without needing to separately resolve
+    which students are on this teacher's roster."""
+    if db is None:
+        raise HTTPException(status_code=503, detail="Persistence unavailable")
+    docs = (
+        db.collection("audit_log")
+        .where(filter=admin_firestore.FieldFilter("actor", "==", user.get("uid", "")))
+        .limit(limit)
+        .stream()
+    )
+    entries = [{**d.to_dict(), "id": d.id} for d in docs]
+    entries = [e for e in entries if str(e.get("action", "")).startswith("dase_weights.")]
+    entries.sort(key=lambda e: e.get("at") or 0, reverse=True)
+    return {"count": len(entries), "entries": entries}
 
 
 @router.put("/teachers/students/{student_id}/dase-weights")
