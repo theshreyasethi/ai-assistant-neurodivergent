@@ -42,31 +42,68 @@ intellectual disability.
 
 ## Current implementation status by disability
 
-DASE can score all 13 profiles declared in `dase_profiles.json`. Content
-generation (simplification wording/structure, quiz item format) currently
-covers 9 of them — the other 4 fall back to the `default` content style
-while still getting their own DASE weighting:
+**Updated post patent-readiness remediation (P1-P5 — see "Patent-readiness
+remediation" section below; a separate, later numbering track from the
+phase log in PHASE_LEARNINGS.md).** DASE can score all 13 profiles
+declared in `dase_profiles.json`, and content generation now covers all
+13 — P4-05 closed the remaining 4:
 
 | Disability | Simplify + quiz content profile | DASE scoring profile |
 |---|---|---|
-| dyslexia, deaf, autism, adhd, blind, dyscalculia, intellectual, anxiety | ✅ dedicated | ✅ dedicated |
-| low_vision | uses `default` content | ✅ dedicated |
-| hard_of_hearing | uses `default` content | ✅ dedicated |
-| dysgraphia | uses `default` content | ✅ dedicated |
-| motor | uses `default` content | ✅ dedicated |
+| dyslexia, deaf, autism, adhd, blind, dyscalculia, intellectual, anxiety, low_vision, hard_of_hearing, dysgraphia, motor | ✅ dedicated | ✅ dedicated |
 
 ## Known gaps, not yet built
 
-- **DASE closed-loop UI**: the backend generates and validates a
-  `simplerQuestion`/`simplerOptions`/`simplerAnswer` variant per item, and
-  `should_represent()` decides when to use it, but `QuizPage.tsx` doesn't
-  currently re-present it on a `COMPREHENSION_BARRIER` classification — the
-  student always sees the original question again on retry.
-- **Voice navigation UI**: `backend/services/intent.py` and the
-  `/api/voice/*` endpoints exist and are tested, but no frontend component
-  currently calls them — a student cannot yet navigate the app by voice.
-- **`FRUST` DASE parameter**: declared with a nonzero weight in most
-  profiles but has no data source; always renormalizes out (§4.6, Layer 3).
-  The chatbot's per-turn frustration score (§4.2) is a separate, real-time-only
-  signal and intentionally does not feed this.
-- **`VIS_ENG`/`WRIT_EXP` DASE parameters**: declared, no data source yet.
+Several items this section used to list are now built — see
+"Patent-readiness remediation" below for what changed and when:
+
+- ~~DASE closed-loop UI~~ — built (P3-03). `QuizPage.tsx` calls
+  `/api/classify` on every wrong answer and re-presents the simpler variant
+  in place on a confident `COMPREHENSION_BARRIER`.
+- ~~Voice navigation UI~~ — built (Phase 2 of the remediation track).
+  `VoiceNavigator.tsx` + `VoiceBootstrap.tsx` are mounted globally; a
+  student can navigate, answer, and control playback by voice.
+- ~~`FRUST` DASE parameter~~ — renamed `RESIL` and given a real data
+  source: `RESIL = 1 - HES`, an interaction-only hesitation index (latency
+  vs personal baseline, answer changes, tab-blur count, mean chatbot
+  frustration_score — `services/hesitation.py`, P4-14).
+- ~~`VIS_ENG`~~ — real data source as of P4-01: `VisualSummary.tsx` emits
+  dwell/expansion/replay events, loaded into `/api/evaluate`. Not yet
+  exercised by real student usage, so treat the *formula* as implemented
+  and the *parameter's validity* as unproven, same caveat as every DASE
+  parameter.
+- ~~`WRIT_EXP`~~ — removed. Replaced by `KNOW` (scored) and `EXPR`
+  (diagnosticOnly) for dysgraphia, per P4-10 — see
+  `services/writing_score.py`.
+
+Genuinely still open:
+
+- `PATTERN` (autism) has a real computation (`services/dase_engine.py`'s
+  `_pattern()`, reading `itemKind` from `services/quiz_gen.py`) but has
+  never been validated against real items at scale.
+- The classifier (`classify_error`) has never been validated against
+  human judgement on real session data — still "a classifier with a
+  stated confidence model," not "an accurate classifier."
+- No screen reader (NVDA/JAWS/VoiceOver) has been run against the voice
+  layer or the broader accessibility baseline.
+- `docs/claims/claim_map.yaml` / `backend/scripts/build_dossier.py`
+  (P5-08) only verify that referenced code and tests exist and pass —
+  they are not legal advice and do not establish novelty or validity.
+  See `docs/PRE_FILING_CHECKLIST.md`.
+
+## Patent-readiness remediation (P1-P5)
+
+A separate, later engagement — a structured audit (`patent_readiness_plan.html`)
+against this codebase, followed by five remediation phases (task IDs
+`P1-01`...`P5-09`). Summarized, not logged turn-by-turn the way
+PHASE_LEARNINGS.md's Phase 0-6 are: Phase 1 closed critical auth/
+provisioning/ownership findings; Phase 2 built the voice-first layer
+described above; Phase 3 fixed five wrong DASE formulas (`ADJ_ACC`,
+`CONSIST`, `TIME_EFF`, `TASK_COMP`, `LRN_VEL`) and added `PATTERN`/`RESIL`,
+teacher weight overrides, and a real backend test suite + ablation script;
+Phase 4 built DHH visual summaries, sign glossary, math manipulatives, the
+dysgraphia writing pipeline, calm mode, auto-pacing and the completed
+hesitation index; Phase 5 rebuilt the teacher dashboard onto the scoped
+analytics API and produced the claim-support dossier tooling referenced
+above. Every phase's commits are tagged with their task IDs in the commit
+message; `git log --grep "P[1-5]-"` finds them.

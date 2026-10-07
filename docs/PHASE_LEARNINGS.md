@@ -1530,3 +1530,111 @@ before scanning, the same lesson twice in one phase.
 30. **A test that pins an exact line number is pinning coincidence, not the thing you meant to
     test.** Search file content for what you are actually verifying; never assume where in the file
     it lives.
+
+---
+
+# Patent-readiness remediation (P1–P5)
+
+**Status:** Complete (P1-01 through P5-09)
+**Note on numbering:** this is a SEPARATE, LATER engagement from Phases 0-6
+above — a structured patent-readiness audit (`patent_readiness_plan.html`,
+not reproduced here) found specific defects and gaps in the codebase those
+phases produced, and five remediation phases fixed them. Task IDs
+(`P1-01`...`P5-09`) are independent of this file's "Phase 0-6" numbers;
+where a task closes a gap this file's own "Carried forward" sections
+named, that's noted below. This section summarizes rather than logs
+turn-by-turn — the audit and every phase's commits carry the detail; see
+`git log --grep "P[1-5]-[0-9]"`.
+
+## Phase 1 — Auth, provisioning, ownership (critical findings)
+
+Closed: default/demo credentials in provisioning code (A04 — the exact
+class of finding Phase 0.4's chatbot-memory fix exists to prevent, in a
+different subsystem); a forced first-login password change that nothing
+server-side actually enforced (A06); two IDOR findings where a teacher or
+student could reach another user's analytics or session data by guessing
+a uid (A01, A02 — the same shape of bug `can_access_student`/
+`assert_session_access` fix generically); no self-service account page for
+any role; an admin UI that allowed creating a student with no teacher
+assigned; console-logged secrets; a CORS config wider than necessary.
+
+## Phase 2 — Voice-first core (closes the §3.8 "Voice navigation UI" gap)
+
+Built the frontend half of Phase 3 (above)'s backend-only voice layer:
+`VoiceNavigator.tsx`/`VoiceBootstrap.tsx` mounted globally, a TypeScript
+port of `services/intent.py` verified byte-for-byte against the real
+Python module (including two genuine quirks, not just the common cases),
+real per-tick focus sampling, resumable lessons, and a rebuilt
+QuizCard/Chatbot for voice operability. Honest gap carried forward:
+still no screen-reader (NVDA/JAWS/VoiceOver) run against any of it — the
+same item Phase 3 (§3.7) above already flagged as outstanding.
+
+## Phase 3 — DASE formula fixes + real test suite
+
+The highest-value phase of the five. Golden-vector tests (none existed
+for `dase_engine.py` before this) exposed that `ADJ_ACC` silently vanished
+for a perfect session, `CONSIST` scored uniform failure a perfect 1.0,
+`TIME_EFF` credited fast WRONG answers against a same-session baseline,
+`TASK_COMP` always read 1.0, and `LRN_VEL` scored a straight-A and a
+straight-F student identically. All five fixed, each pinned by a test
+that fails if the regression comes back. Added `PATTERN` (autism) and
+`RESIL` (renamed from the long-dead `FRUST`), teacher weight overrides
+with mandatory reasons logged to `audit_log`, and `scripts/run_ablation.py`
+(this repo's prior ablation script output — §2.4/§2.5 above — had gone
+stale; this phase's version confirms the original ADHD/`ATT_SPAN` fix
+still holds under the new formulas, and adds a "uniformly failing"
+archetype the original table didn't have).
+
+## Phase 4 — Expanded disability support
+
+Closed the §4-adjacent "9 of 13 content profiles" gap (hard_of_hearing,
+low_vision, dysgraphia, motor now get dedicated simplify/quiz prompts, not
+`default`). Built, and genuinely wired into a reachable UI (the lesson
+this file's own Phase 5.2 section above learned the hard way, about
+`VisualSummary` specifically): DHH visual summaries with a hardened
+Mermaid sanitizer, an experimental POS reader, a licence-safe sign
+glossary, four keyboard-operable math manipulatives plus a verified
+step-by-step solver (every step re-checked by a restricted AST evaluator,
+never `eval()`/`sympify()` on model output), a voice-to-structured-essay
+pipeline with KNOW/EXPR split scoring for dysgraphia, fuzzy/phonetic
+answer matching, calm mode, micro-blocks, auto-pacing, and the completed
+hesitation index (`RESIL`'s data source above was partial until this
+phase added tab-blur and chat-sentiment inputs).
+
+## Phase 5 — Teacher dashboard + patent-claim dossier tooling
+
+Rebuilt `TeacherDashboardPage.tsx` onto `/api/analytics/{roster,class,
+student/:id}` exclusively, removing the N+1 legacy-endpoint pattern (one
+call per student) the original `/teacher/students` + `/teacher/analytics/
+{id}` pair required. Added DASE radar + error-cause charts with an
+accessible `<table>` twin for every chart (screen-reader parity, not an
+afterthought), explicit coverage shown next to every score, and a teacher
+UI for the weight-override endpoint Phase 3 built but had no frontend for.
+`docs/claims/claim_map.yaml` + `backend/scripts/build_dossier.py` generate
+a claim-support dossier that verifies its own citations (every referenced
+function exists, every referenced test passes) rather than trusting
+hand-maintained prose — the dossier FAILS its own build if a citation
+doesn't resolve, the same "a check that always passes is worse than no
+check" discipline as Learning #9 above, applied to patent evidence
+instead of a readability metric.
+
+## Transferable learnings (P1-P5, continuing the numbering above)
+
+31. **An audit is only as good as what it's run against — run it against
+    the code, not the plan.** Every one of Phases 1-4's critical findings
+    (default credentials, IDOR, wrong DASE formulas) existed in code this
+    file's own Phase 0-6 log describes as "Complete." Completion and
+    correctness are different claims.
+32. **A feature can be built, tested, AND unreachable, simultaneously.**
+    `VisualSummary.tsx`'s backend service existed with zero mounted route
+    for an entire phase of this file's own history (Phase 5.2 above); the
+    remediation phases treated "build it" and "wire it into something a
+    user can actually reach" as two separate, both-mandatory steps for
+    every new component, after finding this pattern repeat (the math
+    manipulatives and VoiceEssay could each have shipped unreachable the
+    same way).
+33. **A dossier or evidence document that can't fail its own build is
+    documentation, not evidence.** `build_dossier.py` verifies every
+    citation against the actual repository state at build time; a stale
+    claim_map.yaml entry breaks the build instead of quietly shipping a
+    patent dossier that cites a function that no longer exists.
