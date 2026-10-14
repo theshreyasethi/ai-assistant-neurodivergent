@@ -150,8 +150,19 @@ const VoiceEssay: React.FC<Props> = ({ prompt, expectedConcepts = [], onScored }
             <h4 className="font-heading text-xs font-semibold text-on-surface-variant uppercase tracking-widest mb-2">
               Organized version
             </h4>
-            {structured.warnings.length > 0 && (
-              <p role="alert" className="text-xs text-error font-body mb-2">{structured.warnings.join(' ')}</p>
+            {/* degraded (LLM unreachable) is a graceful fallback, not a
+                failure: the dictation is still shown below, just
+                unorganized. Painting it the same red "alert" as a genuine
+                content-accuracy warning (the number-mismatch case) is what
+                made this read as a broken/error state — it isn't one. */}
+            {structured.degraded ? (
+              <p role="status" className="text-xs text-on-surface-variant font-body mb-2">
+                {structured.warnings.join(' ') || "Couldn't reach the AI organizer right now — showing your words exactly as dictated, nothing is lost."}
+              </p>
+            ) : (
+              structured.warnings.length > 0 && (
+                <p role="alert" className="text-xs text-error font-body mb-2">{structured.warnings.join(' ')}</p>
+              )
             )}
             <ol className="list-decimal list-inside text-sm font-body space-y-1">
               {structured.outline.map((item, i) => <li key={i}>{item}</li>)}

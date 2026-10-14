@@ -79,7 +79,12 @@ FORMATS: Dict[str, str] = {
 - Use the same term for a concept as the lesson used.""",
     "dyscalculia": """This student has dyscalculia.
 - Break any calculation into a single step per question.
-- State what each number counts. Use words instead of notation.""",
+- State what each number counts. Use words instead of notation.
+- If the passage contains ANY arithmetic, a word problem, or a quantity that
+  can be computed (a total, a difference, a count, a measurement), AT LEAST
+  ONE "fill_blank" question MUST test that calculation directly, and its
+  `answer` MUST be a bare number only (e.g. "42", never "42 apples" or
+  "forty-two") so on-screen math tools can recognise and assist with it.""",
     "intellectual": """This student has an intellectual disability.
 - Stem under 10 words. Only the most common everyday words.
 - Test one concrete fact directly stated in the lesson.""",
@@ -123,6 +128,24 @@ SCHEMA_HINT = """Return ONLY a JSON array of 9 objects, each exactly:
   "simplerOptions": ["string", ...],
   "simplerAnswer": "string (must be one of simplerOptions)"
 }"""
+
+
+# Arithmetic word-problem detector for the dyscalculia prompt-reinforcement
+# below: digits plus either an operator symbol or a common calculation verb
+# ("how many", "total", "sum", ...) anywhere in the passage. Deliberately
+# permissive — a false positive just adds a sentence the LLM was going to
+# follow anyway; a false negative is the bug this exists to avoid.
+_ARITHMETIC_RE = re.compile(
+    r"\d+\s*[-+*/x×÷]\s*\d+"
+    r"|\b(sum|total|difference|product|quotient|how many|how much|calculate|"
+    r"add(?:s|ed|ing)?|subtract(?:s|ed|ing)?|multiply|multiplied|divide[sd]?|"
+    r"altogether|remain(?:s|ing)?|left over)\b",
+    re.IGNORECASE,
+)
+
+
+def _has_arithmetic_content(text: str) -> bool:
+    return bool(re.search(r"\d", text)) and bool(_ARITHMETIC_RE.search(text))
 
 
 def _type_options_valid(qtype: str, options: List[str]) -> bool:
@@ -302,6 +325,16 @@ def generate_quiz(
         system = f"{BASE_RULES}\nSTUDENT PROFILE:\n{FORMATS[profile]}\n\n{SCHEMA_HINT}"
         if grade_level:
             system += f"\n\nThis student reads at grade level {grade_level}. Keep vocabulary appropriate."
+        # Reinforced, not just stated once in FORMATS["dyscalculia"] — this
+        # passage demonstrably has arithmetic in it, so skipping a numeric
+        # fill_blank item here would be the generator ignoring content that's
+        # actually there, not a passage that simply had nothing to calculate.
+        if profile == "dyscalculia" and _has_arithmetic_content(text):
+            system += (
+                "\n\nThis passage contains arithmetic. At least one \"fill_blank\" "
+                "question MUST be a calculation based on numbers in the passage, "
+                "with a bare numeric `answer` (digits only, no units or words)."
+            )
         # retries=2: the merged schema (9 questions x full disability-format
         # fields x a per-item simpler-variant) is large enough that Gemini
         # occasionally emits a malformed field even when otherwise on-topic;

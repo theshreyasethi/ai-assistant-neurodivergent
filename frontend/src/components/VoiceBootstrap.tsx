@@ -68,37 +68,51 @@ const VoiceBootstrap: React.FC = () => {
     setArmed(false);
   }, [loading, profile.prefs.ttsRate, profile.prefs.voiceFirst, savePrefs]);
 
+  // One listener pair, covering both the "already armed on this device"
+  // case (any key/pointer unlocks+speaks) and the first-ever "press V to
+  // opt in" case — in the SAME keydown, not a separate one after it.
+  //
+  // Previously these were two separate effects: pressing V only called
+  // setArmed(true) and waited for a SECOND keypress/pointerdown (added by
+  // the other effect, on the next render) to actually call start(). That
+  // second press is easy to miss, which read as "pressing V does nothing
+  // until I reload the page" — on reload, armed is already true from
+  // localStorage, so the very next keypress calls start() immediately and
+  // it looks "fixed". Calling start() directly from the same V keydown
+  // that arms the device closes that gap instead of relying on a reload.
   React.useEffect(() => {
     setAnnounce(
       armed
         ? 'EduEase voice mode is on. Press any key to hear this page.'
         : 'Press V for voice-first mode.',
     );
-    if (!armed) return;
-    // Any key (including Tab) or pointer counts as user activation.
-    window.addEventListener('keydown', start, { once: true });
-    window.addEventListener('pointerdown', start, { once: true });
-    return () => {
-      window.removeEventListener('keydown', start);
-      window.removeEventListener('pointerdown', start);
-    };
-  }, [armed, start]);
 
-  // Opt-in trigger for a user who has NOT already armed voice-first on this
-  // device: pressing V (outside a text field) arms it, same welcome flow.
-  React.useEffect(() => {
-    if (armed) return;
     const onKeyDown = (e: KeyboardEvent) => {
+      if (armed) {
+        start();
+        return;
+      }
       const target = e.target as HTMLElement;
       const inField = /input|textarea|select/i.test(target?.tagName ?? '');
       if (!inField && e.key.toLowerCase() === 'v') {
         writeDevicePref(true);
         setArmed(true);
+        start();
       }
     };
+    // Pointer activation only unlocks once already armed — a bare click
+    // on a fresh device is not the explicit "V" opt-in.
+    const onPointerDown = () => {
+      if (armed) start();
+    };
+
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [armed]);
+    window.addEventListener('pointerdown', onPointerDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('pointerdown', onPointerDown);
+    };
+  }, [armed, start]);
 
   return (
     <>

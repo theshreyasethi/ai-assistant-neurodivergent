@@ -20,7 +20,12 @@ interface OverrideState {
  * is actually typed before the request can be sent.
  */
 const WeightOverride: React.FC<Props> = ({ studentId }) => {
-  const [parameters, setParameters] = useState<string[]>([]);
+  // code -> full-form plain-language description (backend/data/dase_profiles.json's
+  // _parameters, served as-is by GET /api/dase/profiles). Previously only the
+  // codes (Object.keys) were kept and the descriptions already being fetched
+  // were thrown away, which is why this panel showed bare codes like "ACC"
+  // with no explanation of what they meant.
+  const [parameters, setParameters] = useState<Record<string, string>>({});
   const [current, setCurrent] = useState<OverrideState | null>(null);
   const [draft, setDraft] = useState<Record<string, number>>({});
   const [reason, setReason] = useState('');
@@ -36,7 +41,7 @@ const WeightOverride: React.FC<Props> = ({ studentId }) => {
       api.get(`/api/teachers/students/${studentId}/dase-weights`),
     ])
       .then(([profilesRes, overrideRes]) => {
-        setParameters(Object.keys(profilesRes.data.parameters ?? {}));
+        setParameters(profilesRes.data.parameters ?? {});
         setCurrent(overrideRes.data);
         setDraft(overrideRes.data.weights ?? {});
         setReason('');
@@ -88,9 +93,14 @@ const WeightOverride: React.FC<Props> = ({ studentId }) => {
   return (
     <div className="glass-card rounded-3xl p-6 space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="font-heading text-xs font-semibold text-on-surface-variant uppercase tracking-widest">
-          DASE weight override
-        </h3>
+        <div>
+          <h3 className="font-heading text-xs font-semibold text-on-surface-variant uppercase tracking-widest">
+            DASE weight override
+          </h3>
+          <p className="text-[11px] text-on-surface-variant font-body mt-0.5">
+            DASE = Disability-Adaptive Scoring Engine
+          </p>
+        </div>
         {current?.active && (
           <button onClick={clear} disabled={saving} className="text-xs font-heading font-semibold text-error underline disabled:opacity-50">
             Clear override
@@ -106,10 +116,10 @@ const WeightOverride: React.FC<Props> = ({ studentId }) => {
 
       <fieldset className="grid grid-cols-2 sm:grid-cols-3 gap-2">
         <legend className="sr-only">Parameters to include in the override</legend>
-        {parameters.map((param) => {
+        {Object.keys(parameters).map((param) => {
           const included = param in draft;
           return (
-            <label key={param} className="flex items-center gap-2 text-sm font-body">
+            <label key={param} className="flex items-center gap-2 text-sm font-body" title={parameters[param]}>
               <input type="checkbox" checked={included} onChange={(e) => toggleParam(param, e.target.checked)} />
               {param}
               {included && (
@@ -124,6 +134,22 @@ const WeightOverride: React.FC<Props> = ({ studentId }) => {
           );
         })}
       </fieldset>
+
+      {Object.keys(parameters).length > 0 && (
+        <details className="rounded-xl border border-outline-variant/40 px-4 py-2">
+          <summary className="text-xs font-heading font-semibold text-on-surface-variant cursor-pointer select-none">
+            What do these parameters mean?
+          </summary>
+          <dl className="mt-3 space-y-2">
+            {Object.entries(parameters).map(([code, description]) => (
+              <div key={code}>
+                <dt className="text-xs font-heading font-bold text-on-surface">{code}</dt>
+                <dd className="text-xs text-on-surface-variant font-body">{description}</dd>
+              </div>
+            ))}
+          </dl>
+        </details>
+      )}
 
       <label htmlFor="override-reason" className="block text-sm font-heading font-semibold text-on-surface">
         Reason (required)

@@ -32,6 +32,8 @@ FASTER = "FASTER"
 SLOWER = "SLOWER"
 ANSWER = "ANSWER"
 SUBMIT = "SUBMIT"
+SKIP_QUESTION = "SKIP_QUESTION"
+EXIT_QUIZ = "EXIT_QUIZ"
 UNKNOWN = "UNKNOWN"
 
 ROUTES = {
@@ -45,9 +47,12 @@ ROUTES = {
 
 # Spoken option names -> zero-based index. A blind student cannot click, so
 # answering by voice is not a convenience here, it is the only route in.
+# "true"/"false" map onto the same 0/1 slots as a/first and b/second since
+# services/quiz_gen.py always renders true_false questions as
+# options=["True", "False"] in that order.
 _OPTION_WORDS = {
-    "a": 0, "first": 0, "one": 0, "1": 0,
-    "b": 1, "second": 1, "two": 1, "2": 1,
+    "a": 0, "first": 0, "one": 0, "1": 0, "true": 0,
+    "b": 1, "second": 1, "two": 1, "2": 1, "false": 1,
     "c": 2, "third": 2, "three": 2, "3": 2,
     "d": 3, "fourth": 3, "four": 3, "4": 3,
 }
@@ -105,6 +110,12 @@ _RULES: List[tuple] = [
     (SLOWER, re.compile(r"\b(slower|slow down|too fast)\b")),
 
     (SUBMIT, re.compile(r"\b(submit|confirm|next question|done|that'?s my answer|lock it in)\b")),
+
+    # Blind/voice-first students have no "Skip" or "Exit" button to click —
+    # these are the only route to either action (same reasoning as ANSWER).
+    (SKIP_QUESTION, re.compile(
+        r"\bskip\b(\s+(this|that|the)\s+question)?|\bpass\b\s+(this|on this)\s+question\b")),
+    (EXIT_QUIZ, re.compile(r"\b(exit|quit|leave)\b(\s+(this|the))?\s*quiz\b|\b(exit|quit)\b")),
 ]
 
 # "go to X" / "open X" / "take me to X"
@@ -123,14 +134,16 @@ _NAV_TARGETS = {
     "teacher": "teacher",
 }
 
-# "answer B" / "choose the second one" / "select option 3"
+# "answer B" / "choose the second one" / "select option 3" / "answer true"
 _ANSWER_RE = re.compile(
     r"\b(answer|choose|select|pick|option|number)\b\s*"
     r"(?:is\s+|the\s+)?(?:option\s+|number\s+)?"
-    r"\b([abcd]|first|second|third|fourth|one|two|three|four|[1-4])\b"
+    r"\b([abcd]|first|second|third|fourth|one|two|three|four|[1-4]|true|false)\b"
 )
-# bare "B" or "option two" with nothing else said
-_BARE_OPTION_RE = re.compile(r"^\s*(?:option\s+)?([abcd]|[1-4]|first|second|third|fourth)\s*$")
+# bare "B", "option two", "true" or "false" with nothing else said
+_BARE_OPTION_RE = re.compile(
+    r"^\s*(?:option\s+)?([abcd]|[1-4]|first|second|third|fourth|true|false)\s*$"
+)
 
 
 def normalise(text: str) -> str:
@@ -176,7 +189,8 @@ HELP_TEXT = (
     "You can say: go to my quizzes, go to my lessons, or go to my dashboard. "
     "While reading, say read next, read previous, repeat, or read everything. "
     "Say explain this if something is unclear, or what is on this page to hear a description. "
-    "In a quiz, say answer A, answer B, answer C or answer D, then say submit. "
+    "In a quiz, say answer A, answer B, answer C or answer D, or true or false, then say submit. "
+    "Say skip this question to move on without answering, or exit quiz to leave the quiz. "
     "Say faster or slower to change the reading speed. "
     "Say stop at any time to make me quiet."
 )
@@ -186,7 +200,8 @@ LLM_SYSTEM = f"""You classify a blind student's spoken command in a learning app
 Reply with ONLY a JSON object: {{"intent": "...", "slots": {{}}}}
 
 Valid intents: {NAVIGATE}, {READ_NEXT}, {READ_PREVIOUS}, {READ_ALL}, {REPEAT}, {STOP},
-{DESCRIBE_PAGE}, {EXPLAIN}, {PROGRESS}, {HELP}, {FASTER}, {SLOWER}, {ANSWER}, {SUBMIT}, {UNKNOWN}
+{DESCRIBE_PAGE}, {EXPLAIN}, {PROGRESS}, {HELP}, {FASTER}, {SLOWER}, {ANSWER}, {SUBMIT},
+{SKIP_QUESTION}, {EXIT_QUIZ}, {UNKNOWN}
 
 For {NAVIGATE}, slots must be {{"target": one of dashboard|quiz|learning|upload|content|teacher}}.
 For {ANSWER}, slots must be {{"optionIndex": 0|1|2|3}}.

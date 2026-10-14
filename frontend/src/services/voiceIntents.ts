@@ -28,6 +28,8 @@ export const FASTER = 'FASTER';
 export const SLOWER = 'SLOWER';
 export const ANSWER = 'ANSWER';
 export const SUBMIT = 'SUBMIT';
+export const SKIP_QUESTION = 'SKIP_QUESTION';
+export const EXIT_QUIZ = 'EXIT_QUIZ';
 export const UNKNOWN = 'UNKNOWN';
 
 export const ROUTES: Record<string, string> = {
@@ -39,9 +41,12 @@ export const ROUTES: Record<string, string> = {
   teacher: '/teacher-dashboard',
 };
 
+// "true"/"false" map onto the same 0/1 slots as a/first and b/second since
+// backend/services/quiz_gen.py always renders true_false questions as
+// options=["True", "False"] in that order.
 const OPTION_WORDS: Record<string, number> = {
-  a: 0, first: 0, one: 0, '1': 0,
-  b: 1, second: 1, two: 1, '2': 1,
+  a: 0, first: 0, one: 0, '1': 0, true: 0,
+  b: 1, second: 1, two: 1, '2': 1, false: 1,
   c: 2, third: 2, three: 2, '3': 2,
   d: 3, fourth: 3, four: 3, '4': 3,
 };
@@ -67,6 +72,10 @@ const RULES: Array<[string, RegExp]> = [
   [FASTER, /\b(faster|speed up|quicker|too slow)\b/],
   [SLOWER, /\b(slower|slow down|too fast)\b/],
   [SUBMIT, /\b(submit|confirm|next question|done|that'?s my answer|lock it in)\b/],
+  // Blind/voice-first students have no "Skip" or "Exit" button to click —
+  // these are the only route to either action (same reasoning as ANSWER).
+  [SKIP_QUESTION, /\bskip\b(\s+(this|that|the)\s+question)?|\bpass\b\s+(this|on this)\s+question\b/],
+  [EXIT_QUIZ, /\b(exit|quit|leave)\b(\s+(this|the))?\s*quiz\b|\b(exit|quit)\b/],
 ];
 
 // "go to X" / "open X" / "take me to X"
@@ -81,10 +90,10 @@ const NAV_TARGETS: Record<string, string> = {
   teacher: 'teacher',
 };
 
-// "answer B" / "choose the second one" / "select option 3"
-const ANSWER_RE = /\b(answer|choose|select|pick|option|number)\b\s*(?:is\s+|the\s+)?(?:option\s+|number\s+)?\b([abcd]|first|second|third|fourth|one|two|three|four|[1-4])\b/;
-// bare "B" or "option two" with nothing else said
-const BARE_OPTION_RE = /^\s*(?:option\s+)?([abcd]|[1-4]|first|second|third|fourth)\s*$/;
+// "answer B" / "choose the second one" / "select option 3" / "answer true"
+const ANSWER_RE = /\b(answer|choose|select|pick|option|number)\b\s*(?:is\s+|the\s+)?(?:option\s+|number\s+)?\b([abcd]|first|second|third|fourth|one|two|three|four|[1-4]|true|false)\b/;
+// bare "B", "option two", "true" or "false" with nothing else said
+const BARE_OPTION_RE = /^\s*(?:option\s+)?([abcd]|[1-4]|first|second|third|fourth|true|false)\s*$/;
 
 export function normalise(text: string): string {
   return (text || '').toLowerCase().replace(/[^\w\s']/g, ' ').trim();
@@ -131,6 +140,7 @@ export const HELP_TEXT =
   'You can say: go to my quizzes, go to my lessons, or go to my dashboard. ' +
   'While reading, say read next, read previous, repeat, or read everything. ' +
   "Say explain this if something is unclear, or what is on this page to hear a description. " +
-  'In a quiz, say answer A, answer B, answer C or answer D, then say submit. ' +
+  'In a quiz, say answer A, answer B, answer C or answer D, or true or false, then say submit. ' +
+  'Say skip this question to move on without answering, or exit quiz to leave the quiz. ' +
   'Say faster or slower to change the reading speed. ' +
   'Say stop at any time to make me quiet.';

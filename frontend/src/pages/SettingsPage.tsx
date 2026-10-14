@@ -46,7 +46,7 @@ const Toggle: React.FC<{
 );
 
 const SettingsPage: React.FC = () => {
-  const { profile, loading, savePrefs, saveProfile } = useProfile();
+  const { profile, consent, loading, savePrefs, saveProfile, saveConsent } = useProfile();
   const [saving, setSaving] = React.useState<string | null>(null);
 
   const set = async (key: string, patch: Parameters<typeof savePrefs>[0]) => {
@@ -194,8 +194,17 @@ const SettingsPage: React.FC = () => {
               icon="visibility"
               label="Camera focus check"
               description="Uses your camera to gently notice when you look away. Never recorded or sent anywhere."
-              checked={profile.prefs.webcamAttention}
-              onChange={(v) => void set('webcamAttention', { webcamAttention: v })}
+              // canUseWebcam() (types/profile.ts) requires BOTH this preference
+              // AND consent.webcam before <Eye/> is ever allowed to mount — this
+              // toggle's own description IS the consent notice, so flipping it
+              // grants (or revokes) both together. Without this, the camera
+              // check silently never appears no matter how many times this is
+              // switched on, since consent.webcam has no other screen that sets it.
+              checked={profile.prefs.webcamAttention && !!consent?.webcam}
+              onChange={(v) => {
+                void set('webcamAttention', { webcamAttention: v });
+                void saveConsent({ webcam: v });
+              }}
             />
           )}
         </div>

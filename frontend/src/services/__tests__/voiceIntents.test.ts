@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { ANSWER, HELP, matchRules, NAVIGATE, PROGRESS, REPEAT, STOP, SUBMIT, UNKNOWN } from '../voiceIntents';
+import {
+  ANSWER, EXIT_QUIZ, HELP, matchRules, NAVIGATE, PROGRESS, REPEAT, SKIP_QUESTION, STOP, SUBMIT, UNKNOWN,
+} from '../voiceIntents';
 
 describe('voiceIntents.matchRules', () => {
   it('returns null for empty input', () => {
@@ -51,6 +53,14 @@ describe('voiceIntents.matchRules', () => {
       ['answer is c', 2],
       ['number one', 0],
       ['pick the first one', 0],
+      // true_false questions (backend/services/quiz_gen.py always renders
+      // options=["True", "False"]) — previously unmapped entirely, which is
+      // why a blind student answering a true/false question by voice got
+      // "Sorry, I did not catch that."
+      ['true', 0],
+      ['false', 1],
+      ['answer true', 0],
+      ['the answer is false', 1],
     ];
     it.each(cases)('%s -> optionIndex %i', (text, expected) => {
       const result = matchRules(text);
@@ -62,6 +72,21 @@ describe('voiceIntents.matchRules', () => {
       const result = matchRules('take option two');
       expect(result?.intent).toBe(ANSWER);
       expect(result?.slots.optionIndex).toBe(1);
+    });
+  });
+
+  describe('SKIP_QUESTION and EXIT_QUIZ', () => {
+    it('matches skip phrasings', () => {
+      expect(matchRules('skip')?.intent).toBe(SKIP_QUESTION);
+      expect(matchRules('skip this question')?.intent).toBe(SKIP_QUESTION);
+      expect(matchRules('please skip that question')?.intent).toBe(SKIP_QUESTION);
+    });
+
+    it('matches exit/quit/leave quiz phrasings', () => {
+      expect(matchRules('exit quiz')?.intent).toBe(EXIT_QUIZ);
+      expect(matchRules('exit')?.intent).toBe(EXIT_QUIZ);
+      expect(matchRules('quit')?.intent).toBe(EXIT_QUIZ);
+      expect(matchRules('leave the quiz')?.intent).toBe(EXIT_QUIZ);
     });
   });
 

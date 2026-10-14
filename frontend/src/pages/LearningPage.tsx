@@ -502,6 +502,31 @@ const LearningPage: React.FC = () => {
                   <option value="word">Word</option>
                 </select>
               </div>
+
+              {/* Reading speed, in WPM rather than a raw rate multiplier —
+                  ttsRate 1.0 is defined as 200 WPM everywhere else this app
+                  reports it (see wpmSetting below), so the slider just
+                  inverts that conversion on the way back into speech.ts's
+                  rate. Bound directly to the same profile.prefs.ttsRate
+                  FASTER/SLOWER already read and write, so it stays in sync
+                  with voice commands and the Settings page slider. */}
+              <div className="flex items-center gap-2 bg-surface-container rounded-full px-3 py-1.5">
+                <span className="material-symbols-outlined text-on-surface-variant text-[18px]" aria-hidden="true">speed</span>
+                <label htmlFor="reading-wpm" className="text-xs font-heading font-semibold text-on-surface-variant whitespace-nowrap">
+                  {Math.round((profile.prefs.ttsRate || 1) * 200)} WPM
+                </label>
+                <input
+                  id="reading-wpm"
+                  type="range"
+                  min={100}
+                  max={300}
+                  step={10}
+                  value={Math.round((profile.prefs.ttsRate || 1) * 200)}
+                  onChange={(e) => void savePrefs({ ttsRate: Number(e.target.value) / 200 })}
+                  className="w-28 accent-primary"
+                  aria-label="Reading speed in words per minute"
+                />
+              </div>
             </div>
             <div className="flex gap-2">
               <button onClick={handlePrevious} aria-label="Previous sentence"

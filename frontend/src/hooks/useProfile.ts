@@ -3,7 +3,7 @@ import { useAuthState } from 'react-firebase-hooks/auth';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 
 import { auth, db } from '../services/firebase';
-import { applyPrefs, Consent, DEFAULT_PREFS, DEFAULT_PROFILE, Prefs, Profile } from '../types/profile';
+import { applyPrefs, CONSENT_VERSION, Consent, DEFAULT_PREFS, DEFAULT_PROFILE, Prefs, Profile } from '../types/profile';
 
 /** Single source of truth for the signed-in student's accessibility profile. */
 export function useProfile() {
@@ -74,6 +74,26 @@ export function useProfile() {
     [profile, user],
   );
 
+  /** No dedicated consent-flow screen exists yet — granting a specific
+   * consent (e.g. webcam, alongside the "Camera focus check" toggle in
+   * SettingsPage) is the only way `consent.*` is ever written. Merges onto
+   * whatever consent already exists so granting one flag never silently
+   * resets the others, and always stamps the current CONSENT_VERSION. */
+  const saveConsent = useCallback(
+    async (patch: Partial<Consent>) => {
+      const next: Consent = {
+        dataCollection: consent?.dataCollection ?? false,
+        webcam: consent?.webcam ?? false,
+        disabilityDisclosure: consent?.disabilityDisclosure ?? false,
+        version: CONSENT_VERSION,
+        ...patch,
+      };
+      setConsent(next);
+      if (user) await updateDoc(doc(db, 'users', user.uid), { consent: next });
+    },
+    [consent, user],
+  );
+
   return {
     user,
     uid: user?.uid ?? null,
@@ -85,5 +105,6 @@ export function useProfile() {
     loading: loading || authLoading,
     savePrefs,
     saveProfile,
+    saveConsent,
   };
 }

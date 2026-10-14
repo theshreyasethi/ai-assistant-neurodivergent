@@ -55,6 +55,8 @@ def structure_dictation(transcript: str) -> Dict[str, Any]:
 
     try:
         raw = call_json(SYSTEM, f"Dictation:\n\n{transcript[:6000]}")
+        if not isinstance(raw, dict):
+            raise LLMUnavailable(f"model returned a JSON {type(raw).__name__}, not an object")
         degraded = False
     except LLMUnavailable:
         return {
@@ -63,8 +65,23 @@ def structure_dictation(transcript: str) -> Dict[str, Any]:
             "degraded": True,
         }
 
-    outline: List[str] = [str(x).strip() for x in (raw.get("outline") or []) if str(x).strip()]
-    paragraphs: List[str] = [str(x).strip() for x in (raw.get("paragraphs") or []) if str(x).strip()]
+    raw_outline = raw.get("outline")
+    raw_paragraphs = raw.get("paragraphs")
+    outline: List[str] = (
+        [str(x).strip() for x in raw_outline if str(x).strip()] if isinstance(raw_outline, list) else []
+    )
+    paragraphs: List[str] = (
+        [str(x).strip() for x in raw_paragraphs if str(x).strip()] if isinstance(raw_paragraphs, list) else []
+    )
+    # The model returned a well-formed JSON object but not usable paragraphs
+    # (e.g. {"outline": [...]} with no "paragraphs" key, or the wrong type) —
+    # same honest fallback as LLMUnavailable, not an empty essay.
+    if not paragraphs:
+        return {
+            "outline": outline, "paragraphs": [transcript],
+            "warnings": ["AI structuring returned an unusable response — showing the raw dictation unorganised."],
+            "degraded": True,
+        }
 
     source_numbers = _numbers_in(transcript)
     produced_numbers = _numbers_in(" ".join(paragraphs))

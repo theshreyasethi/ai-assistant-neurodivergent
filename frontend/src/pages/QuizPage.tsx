@@ -338,6 +338,43 @@ const QuizPage: React.FC = () => {
     }
   };
 
+  /** Move on without answering — never counted as wrong (no telemetry
+   * QuestionEvent is tracked at all), since a skip is "not attempted", not
+   * a knowledge gap. Reachable by keyboard, click, or voice ("skip this
+   * question") for students with no other way past a question they can't
+   * or don't want to answer right now. */
+  const handleSkip = () => {
+    if (profile.prefs.voiceFirst) speakOnce("Skipped.", { rate: profile.prefs.ttsRate || 1 });
+    setSelectedAnswer(null);
+    setTypedAnswer("");
+    const isFinal = currentIndex >= totalQuestions - 1;
+    if (!isFinal) {
+      setCurrentIndex((i) => i + 1);
+    } else {
+      finishQuiz(currentIndex, score, wrongTopics);
+    }
+  };
+
+  /** Leave the quiz early — ends the telemetry session as incomplete
+   * (never silently dropped) and returns to the dashboard. Reachable by
+   * keyboard, click, or voice ("exit quiz") for blind/voice-first students
+   * who have no other way to back out mid-quiz. */
+  const handleExit = () => {
+    if (sessionIdRef.current && uid) {
+      const { focusRatio: finalFocusRatio } = focusMeterRef.current.read();
+      endSession(sessionIdRef.current, {
+        totalQuestions: currentIndex,
+        correct: score,
+        totalTimeMs: Date.now() - quizStartRef.current,
+        completed: false,
+        meanFocusRatio: finalFocusRatio,
+        meanChatFrustration: getMeanChatFrustration(),
+      });
+    }
+    if (profile.prefs.voiceFirst) speakOnce("Exiting the quiz.", { rate: profile.prefs.ttsRate || 1 });
+    navigate("/student-dashboard");
+  };
+
   const handleRestart = () => {
     setCurrentIndex(0);
     setScore(0);
@@ -376,6 +413,12 @@ const QuizPage: React.FC = () => {
   });
   useVoiceCommand("PROGRESS", () => {
     speakOnce(`Question ${currentIndex + 1} of ${totalQuestions}. ${score} correct so far.`, { rate: profile.prefs.ttsRate || 1 });
+  });
+  useVoiceCommand("SKIP_QUESTION", () => {
+    handleSkip();
+  });
+  useVoiceCommand("EXIT_QUIZ", () => {
+    handleExit();
   });
 
   if (loading) {
@@ -612,8 +655,19 @@ const QuizPage: React.FC = () => {
         </div>
 
         {/* Navigation */}
-        <div className="col-span-12 flex justify-between items-center mt-4">
-          <div></div>
+        <div className="col-span-12 flex justify-between items-center mt-4 gap-3">
+          <div className="flex gap-2">
+            <button type="button" onClick={handleExit}
+              aria-label="Exit quiz and return to dashboard"
+              className="px-5 py-3 rounded-xl font-heading text-sm font-semibold border border-outline text-on-surface-variant hover:bg-surface-variant/30 transition-all active:scale-95">
+              Exit Quiz
+            </button>
+            <button type="button" onClick={handleSkip}
+              aria-label="Skip this question without answering"
+              className="px-5 py-3 rounded-xl font-heading text-sm font-semibold border border-outline text-on-surface-variant hover:bg-surface-variant/30 transition-all active:scale-95">
+              Skip Question
+            </button>
+          </div>
           <button onClick={handleSubmit} disabled={!hasAnswer}
             className={`px-8 py-3 rounded-xl font-heading text-sm font-semibold transition-all active:scale-95 ${
               hasAnswer

@@ -185,9 +185,14 @@ def create_user(
             },
         )
         batch.commit()
-    except Exception:
+    except Exception as exc:
         # The Firebase Auth user already exists at this point — clean it up
         # rather than leave an orphaned login with no role and no owner.
+        # Logged before re-raising: without this, a Firestore write failure
+        # here is visible to the caller only as a generic 500 with no trace
+        # of WHY the users/{uid} document never got written — the exact
+        # "looks like nothing happened" symptom this is meant to prevent.
+        print(f"[accounts] Firestore write failed for uid={uid} ({role} '{username}'): {exc}")
         try:
             firebase_auth.delete_user(uid)
         except Exception:
