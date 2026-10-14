@@ -1,0 +1,2164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EduEase — Patent-Readiness Plan</title>
+<meta name="description" content="Root-level audit of the EduEase codebase against its documentation, with a phase-by-phase implementation roadmap toward a defensible patent filing.">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>tailwind.config = { darkMode: 'class' };</script>
+<style>
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } * { animation: none !important; transition: none !important; } }
+  body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  :focus-visible { outline: 3px solid #6366f1; outline-offset: 2px; border-radius: 4px; }
+  pre.code { background: #0f172a; color: #e2e8f0; padding: 2.4rem 1rem 1rem; border-radius: 0 0 .5rem .5rem; overflow: auto; font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; max-height: 34rem; margin: 0; white-space: pre; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .92em; }
+  .tab-btn { padding: .6rem 1rem; font-weight: 700; font-size: .9rem; border-bottom: 3px solid transparent; white-space: nowrap; }
+  .tab-on  { border-color: #6366f1; color: #4338ca; }
+  .dark .tab-on { color: #a5b4fc; border-color: #818cf8; }
+  .tab-off { color: #475569; }
+  .dark .tab-off { color: #94a3b8; }
+  .flash { animation: flash 1.8s ease-out; }
+  @keyframes flash { 0% { box-shadow: 0 0 0 4px rgba(99,102,241,.7); } 100% { box-shadow: 0 0 0 4px rgba(99,102,241,0); } }
+  details > summary { list-style-position: inside; }
+  @media print { header nav, #theme, .no-print { display: none !important; } [hidden] { display: block !important; } pre.code { max-height: none; white-space: pre-wrap; } }
+</style>
+</head>
+<body class="bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 antialiased">
+<a href="#main" class="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:bg-indigo-700 focus:text-white focus:px-4 focus:py-2 focus:rounded-lg">Skip to content</a>
+
+<header class="border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 sticky top-0 z-40">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6">
+    <div class="flex flex-wrap items-center justify-between gap-3 py-3">
+      <div>
+        <p class="text-xs font-bold uppercase tracking-widest text-indigo-700 dark:text-indigo-300">EduEase · AI Adaptive Learning Assistant</p>
+        <h1 class="text-xl sm:text-2xl font-extrabold leading-tight">Patent-Readiness Plan</h1>
+        <p class="text-xs text-slate-600 dark:text-slate-400">Codebase audit of <code>main</code> (staged, uncommitted changes) · 2026-09-23 · <span id="meta-counts"></span></p>
+      </div>
+      <button id="theme" type="button" aria-pressed="false" class="no-print rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-sm font-semibold">☾ Dark</button>
+    </div>
+    <nav aria-label="Sections">
+      <div id="tablist" role="tablist" aria-label="Report sections" class="flex overflow-x-auto -mb-px">
+        <button id="tab-overview" role="tab" aria-controls="panel-overview" aria-selected="true">Executive summary</button>
+        <button id="tab-findings" role="tab" aria-controls="panel-findings" aria-selected="false">Gap analysis</button>
+        <button id="tab-roadmap"  role="tab" aria-controls="panel-roadmap"  aria-selected="false">Implementation roadmap</button>
+        <button id="tab-claims"   role="tab" aria-controls="panel-claims"   aria-selected="false">Novelty, formulas &amp; claims</button>
+        <button id="tab-method"   role="tab" aria-controls="panel-method"   aria-selected="false">Method &amp; limits</button>
+      </div>
+    </nav>
+  </div>
+</header>
+
+<main id="main" class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+  <noscript><p class="rounded-lg border border-red-300 bg-red-50 p-4 text-red-900">This report is interactive and needs JavaScript (and internet access for the Tailwind CDN) to render.</p></noscript>
+  <section id="panel-overview" role="tabpanel" aria-labelledby="tab-overview"></section>
+  <section id="panel-findings" role="tabpanel" aria-labelledby="tab-findings" hidden></section>
+  <section id="panel-roadmap"  role="tabpanel" aria-labelledby="tab-roadmap"  hidden></section>
+  <section id="panel-claims"   role="tabpanel" aria-labelledby="tab-claims"   hidden></section>
+  <section id="panel-method"   role="tabpanel" aria-labelledby="tab-method"   hidden></section>
+</main>
+
+<footer class="max-w-7xl mx-auto px-4 sm:px-6 pb-10 text-xs text-slate-600 dark:text-slate-400">
+  Generated from a static and partial-execution audit of the repository. Not legal advice; consult a registered patent attorney before any filing or further public disclosure.
+</footer>
+
+<script>
+/* ───────────── MODULES ───────────── */
+const MODULES = [
+  { id: 'AUTH',  name: 'Auth & Teacher–Student Mapping', short: 'Auth / Mapping',   weight: 0.15, why: 'Access control is the precondition for any per-teacher analytics claim.' },
+  { id: 'BVI',   name: 'Blind / Low-Vision Voice-First', short: 'BVI Voice',        weight: 0.18, why: 'Voice-first adaptive navigation is a named patent-critical novelty.' },
+  { id: 'DEAF',  name: 'Deaf / Hard-of-Hearing Visuals', short: 'Deaf Visuals',     weight: 0.13, why: 'Text-to-visual transformation and visual alert channel.' },
+  { id: 'DASE',  name: 'DASE & Telemetry Engine',        short: 'DASE Engine',      weight: 0.25, why: 'The core novelty: multi-dimensional scoring + cause-based error classification.' },
+  { id: 'EXP',   name: 'Dyscalculia · Dysgraphia · Anxiety · Processing Speed', short: 'Dyscalc/Dysgraph/Anxiety', weight: 0.15, why: 'Expanded profiles that make the “disability-adaptive” claim general.' },
+  { id: 'TEACH', name: 'Teacher Analytics & Patent Dossier', short: 'Teacher Analytics', weight: 0.14, why: 'Where the engine’s output becomes actionable, and where evidence is assembled.' },
+];
+
+const SEV_W = { Critical: 3, High: 2, Medium: 1 };
+const ST_CREDIT = { done: 1, partial: 0.5, mock: 0.15, missing: 0 };
+const ST_LABEL = {
+  done: 'Verified working',
+  partial: 'Partial / flawed',
+  mock: 'Mocked / placeholder',
+  missing: 'Missing',
+};
+
+/* ───────────── GAPS (audit findings) ─────────────
+   st: done | partial | mock | missing   — state of the DESIRED capability
+   pat: 'High novelty' | 'Supporting' | 'Baseline'
+   Tasks that close a gap are derived from TASKS[].closes — single source of truth. */
+const GAPS = [
+  /* ───────── AUTH ───────── */
+  { id: 'A01', m: 'AUTH', cat: 'Teacher-Student Mapping', sev: 'Critical', pat: 'Baseline', st: 'missing',
+    title: 'Any teacher can read any student’s analytics (IDOR)',
+    expected: 'A teacher may only read data for students mapped to them; every per-student endpoint enforces the mapping server-side.',
+    current: 'GET /teacher/analytics/{student_id} only checks role == teacher — no roster check. The dashboard fires it for every roster row and would happily accept any uid. The newer /api/analytics/student/{id} does scope correctly, so the two disagree.',
+    ev: 'backend/app.py:530-532 · contrast backend/routers/analytics.py:98-110' },
+  { id: 'A02', m: 'AUTH', cat: 'Teacher-Student Mapping', sev: 'Critical', pat: 'Baseline', st: 'missing',
+    title: 'Telemetry & evaluation endpoints have no ownership checks',
+    expected: 'Session/evaluation reads and writes are allowed only for the owning student, their mapped teacher, or an admin.',
+    current: 'get_events, end_session, POST /evaluate and GET /evaluation/{student_id} accept any authenticated user and any id. ingest_events writes into whatever sessionId the client names — a student can read another child’s events or poison their session.',
+    ev: 'backend/routers/telemetry.py:65-125 · backend/routers/evaluation.py:87-151' },
+  { id: 'A03', m: 'AUTH', cat: 'Auth', sev: 'Critical', pat: 'Baseline', st: 'missing',
+    title: 'Public self-registration; role chosen and written by the browser; no Firestore rules in repo',
+    expected: 'Accounts exist only if an admin provisioned them. Clients can never write role, teacherId or status.',
+    current: '/register is a public route with a Student/Teacher dropdown; AuthForm calls setDoc(users/{uid}, {role,…}) from the client. No firestore.rules / firebase.json is tracked, so I could not verify anything stops role:"admin" (rules may exist only in the Firebase console — check, and bring them into the repo). Registered students also get no teacher mapping at all.',
+    ev: 'frontend/src/App.tsx:24 · AuthForm.tsx:31,87-100 · (no firestore.rules)' },
+  { id: 'A04', m: 'AUTH', cat: 'Auth', sev: 'Critical', pat: 'Baseline', st: 'missing',
+    title: 'Hard-coded admin credentials, demo accounts seeded at import, credentials printed in the login UI',
+    expected: 'No default credentials anywhere; first admin bootstrapped out-of-band; demo data behind an explicit dev flag.',
+    current: 'ADMIN_EMAIL="admin@test.com" / "admin@123" are in source and _seed_demo_data() runs at import in every deployment (creating 3 teachers + 10 students with known passwords). The login page renders “Fill Credentials” buttons for student1/teacher1.',
+    ev: 'backend/app.py:28-29,45-84 · AuthForm.tsx:103-112,306-340' },
+  { id: 'A05', m: 'AUTH', cat: 'Onboarding', sev: 'Critical', pat: 'Baseline', st: 'partial',
+    title: 'Admin provisioning exists but is not an onboarding workflow',
+    expected: 'Admin creates Teacher/Student accounts with a generated temporary credential, a status (pending_first_login), audit trail, and a printable/spoken hand-off sheet.',
+    current: 'POST /admin/create-user takes an admin-typed password (min 6 chars), returns no credential sheet, sets no status/flag, writes no audit record, and accepts any teacher_id string (not verified to be a teacher).',
+    ev: 'backend/app.py:470-485 · models/schemas.py:56-61 · AdminDashboardPage.tsx:154-159' },
+  { id: 'A06', m: 'AUTH', cat: 'Onboarding', sev: 'Critical', pat: 'Baseline', st: 'missing',
+    title: 'No forced password change on first login',
+    expected: 'Temp credential works once: every API call except “set new password” returns 403 PASSWORD_CHANGE_REQUIRED until the user chooses their own.',
+    current: 'No mustChangePassword state anywhere (backend, Firestore, claims, RoleGate, AuthForm redirect). A child can keep the admin-known password forever.',
+    ev: 'frontend/src/components/AuthForm.tsx:114-134 · RoleGate.tsx · backend/auth.py' },
+  { id: 'A07', m: 'AUTH', cat: 'Teacher-Student Mapping', sev: 'High', pat: 'Supporting', st: 'partial',
+    title: 'Student→teacher mapping is optional, unvalidated and immutable from the UI',
+    expected: 'Every student has ≥1 verified teacher; admin can reassign, bulk-import (CSV) and see unmapped students; mapping supports co-teachers.',
+    current: 'A single users/{uid}.teacher_id string. The “must be assigned” hint is italic text — the <select> is not required and the backend field is Optional. No reassign endpoint, no unmapped-student view, no enrollments collection.',
+    ev: 'AdminDashboardPage.tsx:172-182 · app.py:480-481 · schemas.py:60' },
+  { id: 'A08', m: 'AUTH', cat: 'Profile / Credentials', sev: 'High', pat: 'Baseline', st: 'missing',
+    title: 'Students/teachers cannot manage their own login details',
+    expected: 'Every role can change display name, username/email and password (with re-authentication) and manage their support profile.',
+    current: 'Settings only edits accessibility prefs + disability profile; the /settings route and menu item are student-only, so teachers/admins have no account page. No change-password or change-email path exists.',
+    ev: 'App.tsx:78-85 · Layout.tsx:75-88 · SettingsPage.tsx' },
+  { id: 'A09', m: 'AUTH', cat: 'Onboarding', sev: 'Medium', pat: 'Baseline', st: 'missing',
+    title: 'No account lifecycle: reset password, disable, delete, audit log',
+    expected: 'Admin can reset (re-arms first-login), disable, and remove accounts; every admin action is written to an audit_log.',
+    current: 'Only list + create. Note the token check also never consults revocation/status, so a disabled user would stay valid until token expiry.',
+    ev: 'backend/firebase_config.py:39-46 (no revocation/status check) · app.py:488-504' },
+  { id: 'A10', m: 'AUTH', cat: 'Auth', sev: 'High', pat: 'Baseline', st: 'missing',
+    title: 'Role derived from an email allow-list and auto-provisioned on first request',
+    expected: 'A missing profile document is an error, never an implicit account.',
+    current: 'verify_role() creates users/{uid} on first call and maps admin@test.com / teacher{1-3}@test.com to elevated roles by string match; every other unknown user silently becomes a student.',
+    ev: 'backend/auth.py:30-60' },
+  { id: 'A11', m: 'AUTH', cat: 'Hygiene', sev: 'Medium', pat: 'Baseline', st: 'missing',
+    title: 'Firebase key + full config logged to the browser console',
+    expected: 'No configuration or secrets in console output in production builds.',
+    current: 'console.log("CRITICAL DEBUG - Runtime API Key", …) and the full config JSON on every page load.',
+    ev: 'frontend/src/services/firebase.ts:16-17' },
+  { id: 'A12', m: 'AUTH', cat: 'Hygiene', sev: 'Medium', pat: 'Baseline', st: 'partial',
+    title: 'CORS origins hard-coded; config.CORS_ORIGINS ignored; legacy field names (teacher_id, grade_level)',
+    expected: 'One config source; consistent camelCase schema with a migration path.',
+    current: 'app.py defines its own origins list; config.py’s CORS_ORIGINS is dead code. Mixed snake_case/camelCase across users, sessions, events.',
+    ev: 'backend/app.py:618-632 · config.py:19-25' },
+
+  /* ───────── BVI ───────── */
+  { id: 'B01', m: 'BVI', cat: 'Voice Navigation', sev: 'Critical', pat: 'High novelty', st: 'missing',
+    title: 'Frontend voice layer does not exist — a student cannot navigate by voice',
+    expected: 'Global VoiceNavigator: push-to-talk / hands-free, local rule matching, LLM fallback, spoken read-back, barge-in, VoiceEvent telemetry.',
+    current: 'Backend half exists (services/intent.py + /api/voice/*). No SpeechRecognition call exists anywhere in frontend/src. VoiceNavigator.tsx, speech.ts, voiceIntents.ts, useVoiceCommand.ts are described as “built” in PHASE_LEARNINGS §3.2 but are absent from main, origin/master, history and stash. docs/ROADMAP.md itself lists this as a known gap.',
+    ev: 'grep SpeechRecognition frontend/src → 0 hits · docs/PHASE_LEARNINGS.md:816-826 · docs/ROADMAP.md:65-67' },
+  { id: 'B02', m: 'BVI', cat: 'Voice Navigation', sev: 'Critical', pat: 'High novelty', st: 'missing',
+    title: 'No spoken orientation on site entry (login / landing)',
+    expected: 'On load, a blind user immediately hears where they are and how to proceed — within browser autoplay rules.',
+    current: 'Nothing speaks on load. The only auto-TTS is LearningPage, after simplification, gated by prefs.ttsEnabled. Pre-login the profile is unknown, so there is also no device-level “voice-first” memory.',
+    ev: 'LoginPage.tsx · Layout.tsx · LearningPage.tsx:56-63' },
+  { id: 'B03', m: 'BVI', cat: 'Screen-reader structure', sev: 'High', pat: 'Supporting', st: 'missing',
+    title: 'Fragmented focus order & announcements: no skip link, no route announcer, unlabeled landmarks',
+    expected: 'Skip link; labelled nav; main for every page; on route change: document.title, focus to h1, one polite announcement (WCAG 2.4.1, 2.4.2, 2.4.3, 4.1.3).',
+    current: 'No skip link and no focus/title management on SPA navigation. <nav> has no aria-label; auth pages render without <main>. RoleGate shows an unannounced <div>Loading…</div>. docs claim a skip link and landmarks were added — grep finds none.',
+    ev: 'Layout.tsx:35-37,48,103 · RoleGate.tsx:43-45 · docs/PHASE_LEARNINGS.md:939-944' },
+  { id: 'B04', m: 'BVI', cat: 'Audio orientation', sev: 'High', pat: 'High novelty', st: 'missing',
+    title: 'No audio orientation cues (earcons, progress %, structure tones)',
+    expected: 'Distinct Web-Audio tones for heading / paragraph / question / mic-open / not-understood; reading progress announced at milestones and on request.',
+    current: 'None. LearningPage renders a visual % bar only; the word container’s aria-label changes on every word tick.',
+    ev: 'LearningPage.tsx:196-208,153' },
+  { id: 'B05', m: 'BVI', cat: 'Reading engine', sev: 'High', pat: 'Supporting', st: 'partial',
+    title: 'TTS reading is word-by-word and decoupled from the highlight',
+    expected: 'Sentence-level utterances; highlight driven by SpeechSynthesis boundary events; rate and pause controls; auto-start for voice-first users.',
+    current: 'A setInterval advances the highlight at WPM while a separate effect calls speechSynthesis.speak() for EVERY word (queue floods at 200 wpm, robotic prosody, drift between voice and highlight). Auto-start only when ttsEnabled and only after simplification returns.',
+    ev: 'LearningPage.tsx:72-102,130-139' },
+  { id: 'B06', m: 'BVI', cat: 'Privacy / Consent', sev: 'Critical', pat: 'Baseline', st: 'missing',
+    title: 'Webcam is started for every LearningPage visitor — including blind users and non-consenters',
+    expected: 'Camera only if webcamAllowed(profile) AND consent.webcam; never for blind/low-vision.',
+    current: '<Eye/> is mounted unconditionally and calls getUserMedia on mount. webcamAllowed() is defined but has zero call sites; consent.webcam is stored but never read.',
+    ev: 'LearningPage.tsx:189-195 · Eye.tsx:138 · types/profile.ts:89' },
+  { id: 'B07', m: 'BVI', cat: 'Voice Quiz', sev: 'High', pat: 'High novelty', st: 'missing',
+    title: 'Quiz cannot be completed by voice or reliably by screen reader',
+    expected: 'Question announced on change; options grouped in fieldset/legend; “answer B” → read-back → “submit”; fill-blank answerable by option letter.',
+    current: 'Radio list has no fieldset/legend; no live announcement when the question changes; fill_blank renders only a text box (the 4 generated options are discarded), so “answer B” has nothing to select. QuizCard.tsx is a 3-line placeholder.',
+    ev: 'QuizPage.tsx:319-353 · components/QuizCard.tsx' },
+  { id: 'B08', m: 'BVI', cat: 'Voice Chat', sev: 'High', pat: 'Supporting', st: 'missing',
+    title: 'Chatbot is typing-only and not screen-reader friendly',
+    expected: 'Voice-first RAG chat: STT in, TTS out, barge-in; role=dialog; polite live log.',
+    current: 'Plain text input; new messages are not in a live region; no dialog role/focus trap; deprecated onKeyPress.',
+    ev: 'components/Chatbot.tsx:74-146' },
+  { id: 'B09', m: 'BVI', cat: 'Reading engine', sev: 'Medium', pat: 'Baseline', st: 'missing',
+    title: 'Lesson lives only in router state — refresh/Back loses the lesson and the reader’s place',
+    expected: 'Lessons addressable by URL and resumable at last sentence.',
+    current: 'text/images arrive via location.state; a refresh renders “Loading content…” forever.',
+    ev: 'LearningPage.tsx:20-22,147' },
+  { id: 'B10', m: 'BVI', cat: 'Image description', sev: 'Medium', pat: 'Supporting', st: 'partial',
+    title: 'Image descriptions are generated but shown in a sidebar, not read at the right place',
+    expected: 'Description spoken inline where the image occurs in the text.',
+    current: 'Descriptions are listed by page in a side card and never enter the TTS stream (PHASE_LEARNINGS §3.8 records this as open).',
+    ev: 'LearningPage.tsx:210-225' },
+  { id: 'B11', m: 'BVI', cat: 'Screen-reader structure', sev: 'Medium', pat: 'Baseline', st: 'partial',
+    title: 'Notification live region is unmounted when empty; role=status nested in aria-live',
+    expected: 'A live region present in the DOM before content is injected; single announcement path.',
+    current: 'if (!items.length) return null — the container mounts together with its first message, which many screen readers ignore; each item then adds role=status inside an aria-live parent (double announce).',
+    ev: 'components/AccessibleNotification.tsx:46-64' },
+  { id: 'B12', m: 'BVI', cat: 'Voice Navigation', sev: 'Medium', pat: 'Supporting', st: 'missing',
+    title: 'No Settings for voice-first mode, engine choice (app voice vs own screen reader), speech language',
+    expected: 'Toggle voiceFirst; choose app-TTS or “I use NVDA/JAWS” (announce via aria-live only, never speechSynthesis); language/voice pickers.',
+    current: 'Prefs.voiceNav is declared but has no UI and no consumer. TTS language hard-coded en-US although the UI offers hi/ta; <html lang> never updated.',
+    ev: 'types/profile.ts:41 · SettingsPage.tsx · LearningPage.tsx:116 · i18n.ts' },
+  { id: 'B13', m: 'BVI', cat: 'Privacy / Consent', sev: 'Medium', pat: 'Baseline', st: 'missing',
+    title: 'Cloud-STT privacy notice and non-Chromium fallback',
+    expected: 'Consent copy states that Chrome/Edge STT streams audio to a cloud service; graceful keyboard fallback elsewhere.',
+    current: 'Not mentioned in consent text (recorded as open in PHASE_LEARNINGS §3.8).',
+    ev: 'AuthForm.tsx:265-293 · docs/PHASE_LEARNINGS.md:987-989' },
+  { id: 'B14', m: 'BVI', cat: 'Reading engine', sev: 'Medium', pat: 'Baseline', st: 'mock',
+    title: '16 placeholder stubs incl. tts.ts, stt.ts, TTSControls, STTButton, ProgressBar, QuizCard',
+    expected: 'Real shared TTS/STT services and controls used by every page.',
+    current: 'services/tts.ts, stt.ts, searchIndex.ts, storage.ts; utils/accessibility|chunking|readability; components ControlsBar, FocusHighlighter, IconStepCard, ProgressBar, QuizCard, STTButton, SimplifiedView, Stepper, TTSControls are 1–3 line comments/“<div>Name</div>”. Each page hand-rolls its own speechSynthesis calls (LearningPage, Eye, AccessibleNotification).',
+    ev: 'frontend/src/{services,utils,components}/* (16 files)' },
+  { id: 'B15', m: 'BVI', cat: 'Voice Navigation', sev: 'High', pat: 'High novelty', st: 'done',
+    title: 'Rule-first intent engine with LLM fallback, closed command set, answer-by-letter',
+    expected: 'Deterministic rules resolve the closed command set; the LLM cannot invent a destination.',
+    current: 'services/intent.py: 14 intents, STOP priority, ANSWER/NAVIGATE slot validation, LLM output validated against ROUTES. Exposed at /api/voice/intent and /api/voice/commands. (Unit tests referenced by docs are missing — see S14.)',
+    ev: 'backend/services/intent.py · routers/voice_intent.py' },
+  { id: 'B16', m: 'BVI', cat: 'Image description', sev: 'Medium', pat: 'Supporting', st: 'done',
+    title: 'Educational (not alt-text) image descriptions with announced failures',
+    expected: 'Vision-LLM prompt asks for what the image teaches; failures announced.',
+    current: 'services/image_describer.py with size filter, per-PDF cap, cache and degraded flag; /upload-pdf opt-in via describeImages.',
+    ev: 'backend/services/image_describer.py · app.py:236-243' },
+
+  /* ───────── DEAF ───────── */
+  { id: 'D01', m: 'DEAF', cat: 'Text→Visual', sev: 'High', pat: 'High novelty', st: 'partial',
+    title: 'Text-to-visual generator has no endpoint, no UI and no renderer',
+    expected: 'POST /api/visual-summary → Mermaid diagram + concept cards rendered in-app with a text alternative.',
+    current: 'services/visual_generator.py is complete (single cached LLM call, degraded shape) but app.py never imports it, no router exposes it, mermaid is not in package.json and VisualSummary.tsx (named in its own docstring) does not exist. _valid_node_id() is defined but never called.',
+    ev: 'backend/services/visual_generator.py:13,56,93 · app.py:24 (import list)' },
+  { id: 'D02', m: 'DEAF', cat: 'Visual alerts', sev: 'High', pat: 'Supporting', st: 'partial',
+    title: 'Real-time visual alerts limited to a toast and a vibration',
+    expected: 'Non-audio alert channel: icon + text + flash-safe border pulse + persistent caption log for every event that currently has (or would have) a sound.',
+    current: 'notify() → toast (+ vibrate on error/success). No pulse/border, no persistent log, no coupling to TTS start/stop, quiz feedback or session end. captionsAlways only flips aria-live politeness.',
+    ev: 'services/notify.ts · AccessibleNotification.tsx:49-63' },
+  { id: 'D03', m: 'DEAF', cat: 'POS reader', sev: 'Medium', pat: 'Baseline', st: 'missing',
+    title: 'Part-of-speech visual text reader',
+    expected: 'Opt-in overlay marking nouns/verbs/etc. with colour AND underline/pattern (never colour alone).',
+    current: 'Not built. docs/ROADMAP.md deliberately cut it (“no evidence it helps deaf readers specifically”). Treat as experimental, measured feature — not a patent pillar.',
+    ev: 'docs/ROADMAP.md:40' },
+  { id: 'D04', m: 'DEAF', cat: 'Sign dictionary', sev: 'Medium', pat: 'Supporting', st: 'missing',
+    title: 'Sign dictionary integration',
+    expected: 'Tap a word → short captioned sign clip.',
+    current: 'Not built; cut in ROADMAP because no freely licensable ASL/ISL video API. Licence-safe route: teacher-curated glossary with school-owned clips.',
+    ev: 'docs/ROADMAP.md:37' },
+  { id: 'D05', m: 'DEAF', cat: 'Measurement', sev: 'High', pat: 'High novelty', st: 'missing',
+    title: 'VIS_ENG has no data source — 0.40 of the deaf profile’s scorable weight is dead',
+    expected: 'Visual-engagement telemetry (diagram dwell, card expansions, replays) feeding VIS_ENG.',
+    current: 'Measured against the engine: deaf profile scorable weight = 1.00, of which VIS_ENG 0.20 + WRIT_EXP 0.15 + FRUST 0.05 = 0.40 has no source → coverage ceiling 0.60. hard_of_hearing loses 0.15.',
+    ev: 'backend/data/dase_profiles.json:125-148 · verified by run' },
+  { id: 'D06', m: 'DEAF', cat: 'Content', sev: 'High', pat: 'Supporting', st: 'done',
+    title: 'Deaf simplification + quiz-format profile (≤10-word sentences, literal, SVO, numbered steps)',
+    expected: 'Profile encodes documented barriers, composes with grade level.',
+    current: 'nlp_simplify.PROFILES["deaf"], quiz_gen.FORMATS["deaf"], readability before/after metric, cache.',
+    ev: 'backend/services/nlp_simplify.py:46-54 · quiz_gen.py:57-61' },
+
+  /* ───────── DASE ───────── */
+  { id: 'S01', m: 'DASE', cat: 'DASE formula', sev: 'High', pat: 'High novelty', st: 'done',
+    title: 'Multi-dimensional composite: per-profile weights, measurability renormalisation, coverage, diagnostic-only rule',
+    expected: 'score = Σ p_k·w_k / Σ w_k over measurable, scorable k; coverage reported; parameters absent (never 0) when unmeasurable.',
+    current: 'Verified by execution: renormalisation, coverage and diagnosticOnly behave as documented; score ∈ [0,1].',
+    ev: 'backend/services/dase_engine.py:417-464' },
+  { id: 'S02', m: 'DASE', cat: 'Error classifier', sev: 'High', pat: 'High novelty', st: 'done',
+    title: 'Cause-based classifier logic (4 causes, personal baseline, confidence, alternatives, abstention)',
+    expected: 'Knowledge Gap / Attention Lapse / Processing Delay / Comprehension Barrier with calibrated confidence.',
+    current: 'Verified truth table: fast+wrong+no focus → KNOWLEDGE_GAP 0.30 with alternatives; fast+wrong+focus 0.3 → ATTENTION_LAPSE; fast+wrong+focus 0.9 → COMPREHENSION_BARRIER; ≥2× baseline → PROCESSING_DELAY. (Its inputs are mocked — see S03.)',
+    ev: 'backend/services/dase_engine.py:112-208' },
+  { id: 'S03', m: 'DASE', cat: 'Telemetry', sev: 'Critical', pat: 'High novelty', st: 'mock',
+    title: 'Quiz telemetry is hard-coded; classifier never runs; error breakdown is always empty',
+    expected: 'Every QuestionEvent carries measured timeToFirstInteraction, answerChanges, revisits, reRead, hintsUsed, focus; wrong answers are classified and the label persisted.',
+    current: 'QuizPage emits timeToFirstInteractionMs:null, attempts:1, answerChanges:0, hintsUsed:0, revisits:0, reRead:false, focusRatio:null, focusSamples:0 as literals. /api/classify has zero callers; QuestionEvent has no classification field (Pydantic drops extras) so it could not be stored anyway. Run on QuizPage-shaped events: ADJ_ACC absent, EFFORT capped at 0.30, errorBreakdown = {all four 0, unclassified = every wrong answer}.',
+    ev: 'QuizPage.tsx:99-124 · models/schemas.py:74-97 · verified by run' },
+  { id: 'S04', m: 'DASE', cat: 'Telemetry', sev: 'Critical', pat: 'High novelty', st: 'mock',
+    title: 'Focus signal never reaches DASE (Eye not on quiz; FocusMeter unused; counts transitions)',
+    expected: '≥5 face-presence samples per question feed focusRatio/focusSamples.',
+    current: '<Eye/> is only on LearningPage and only pauses playback. FocusMeter has zero call sites and increments samples only when set() is called — Eye’s onFocusChange fires only on a state flip after a 4 s debounce, so a focused student yields 0–1 “samples” and read() returns null.',
+    ev: 'telemetry.ts:181-213 · Eye.tsx:230-258 · LearningPage.tsx:190-195' },
+  { id: 'S05', m: 'DASE', cat: 'Closed loop', sev: 'High', pat: 'High novelty', st: 'missing',
+    title: 'Closed loop UI: re-present simplerQuestion on COMPREHENSION_BARRIER',
+    expected: 'On a confident barrier label the quiz swaps in the pre-generated simpler variant and logs isRepresentation/originalQuestionId.',
+    current: 'Backend generates + validates simplerQuestion/Options/Answer and exposes should_represent(); the frontend’s Question type does not even declare the fields (docs/ROADMAP.md lists this as open).',
+    ev: 'quiz_gen.py:84-97 · routers/evaluation.py:34-57 · QuizPage.tsx:8-17' },
+  { id: 'S06', m: 'DASE', cat: 'Telemetry', sev: 'High', pat: 'High novelty', st: 'partial',
+    title: 'VOICE_Q / NAV_EFF formulas exist but voice events are never emitted or loaded',
+    expected: 'VoiceEvent telemetry from the navigator joins the active session; /evaluate passes them to the engine.',
+    current: 'LearningEvent union has no voice type; _load_session_events returns only question+reading events and evaluate() never passes voice_events, so both parameters are unreachable in production (blind coverage stays at the 0.63 measured on quiz-only data).',
+    ev: 'telemetry.ts:58 · routers/evaluation.py:65-77,102 · dase_engine.py:240-287' },
+  { id: 'S07', m: 'DASE', cat: 'DASE formula', sev: 'High', pat: 'High novelty', st: 'partial',
+    title: 'ADJ_ACC vanishes for a session with no wrong answers',
+    expected: 'ADJ_ACC (ADHD’s heaviest weight, 0.28) exists for every session with classifiable data — including perfect ones.',
+    current: 'Emitted only if some wrong answer carries a classification. Verified: all-correct session → ACC = 1.0, ADJ_ACC absent, so the best sessions score with the key ADHD parameter renormalised away.',
+    ev: 'dase_engine.py:321-337 · verified by run' },
+  { id: 'S08', m: 'DASE', cat: 'DASE formula', sev: 'High', pat: 'High novelty', st: 'partial',
+    title: 'CONSIST is 1−4·p(1−p): it rewards uniformly failing students',
+    expected: 'A consistency measure independent of accuracy level.',
+    current: 'Within one difficulty band the population variance of 0/1 correctness equals p(1−p), so CONSIST = 1−4p(1−p): 0 % accurate → 1.00, 100 % → 1.00, 50 % → 0.00. It measures accuracy extremity, not consistency (observed 0.111 at ACC 0.667). Weighted 0.05–0.20 in 9 of 13 profiles.',
+    ev: 'dase_engine.py:361-372' },
+  { id: 'S09', m: 'DASE', cat: 'DASE formula', sev: 'High', pat: 'High novelty', st: 'partial',
+    title: 'TIME_EFF credits fast wrong answers and uses a within-session median',
+    expected: 'Efficiency on correct answers, against the student’s cross-session personal baseline (as documented).',
+    current: 'Ratios are computed over all answered items (a 1-second wrong guess scores 1.0) and the “baseline” is the median of the same session’s events, so a constant-pace student is 1.0 by construction (verified) and the metric only measures the slow tail.',
+    ev: 'dase_engine.py:344-350' },
+  { id: 'S10', m: 'DASE', cat: 'DASE formula', sev: 'Medium', pat: 'Supporting', st: 'partial',
+    title: 'TASK_COMP is computed from one session, so it is always 1.0 or 0',
+    expected: 'Completed ÷ started across the last N sessions, abandoned sessions included.',
+    current: 'evaluate() passes sessions = [current]; and evaluation only runs after a completed quiz, so abandoned sessions (tab closed) never count.',
+    ev: 'routers/evaluation.py:99-100 · dase_engine.py:396-399 · QuizPage.tsx:148-156' },
+  { id: 'S11', m: 'DASE', cat: 'Integrity', sev: 'High', pat: 'Supporting', st: 'missing',
+    title: 'Scoring profile is client-supplied; no teacher override or audit trail',
+    expected: 'Weights derived server-side from users/{uid}.profile.primary; teacher overrides stored with reason + audit log.',
+    current: 'POST /evaluate trusts body.profile (and ignores body.studentId correctly). dase_profiles.json promises “teachers may override per student and the override is logged” — no endpoint, storage or UI exists.',
+    ev: 'routers/evaluation.py:80-111 · data/dase_profiles.json:3-4' },
+  { id: 'S12', m: 'DASE', cat: 'DASE formula', sev: 'High', pat: 'High novelty', st: 'missing',
+    title: 'Declared parameters without definition or source: PATTERN, FRUST, VIS_ENG, WRIT_EXP',
+    expected: 'Every weighted parameter has a formula, a data source and a test.',
+    current: 'PATTERN (autism, weight 0.20) is not even listed in _parameters. FRUST (0.05 in 7 profiles) has positive weight but is named as the thing to minimise (semantic inversion risk). Measured dead weight: autism 0.25, deaf 0.40, hard_of_hearing 0.15, dysgraphia 0.15.',
+    ev: 'data/dase_profiles.json · verified by run' },
+  { id: 'S13', m: 'DASE', cat: 'Weights', sev: 'Medium', pat: 'Supporting', st: 'partial',
+    title: 'Weight authoring inconsistencies vs the project’s own diagnostic-only rule',
+    expected: 'Weights sum to 1; a parameter a more severe form of the condition would mechanically lower is diagnostic-only.',
+    current: 'adhd and dyslexia sum to 1.10. dyslexia scores TIME_EFF (0.10) — slower decoding is the condition; dysgraphia and deaf score WRIT_EXP (0.15) — same objection. Weights are literature-informed, unvalidated (correctly disclosed).',
+    ev: 'data/dase_profiles.json:51-63,67-79,125-137,164-173' },
+  { id: 'S14', m: 'DASE', cat: 'Evidence', sev: 'High', pat: 'High novelty', st: 'missing',
+    title: 'No tests, no ablation script, no CI — but docs cite them as passing',
+    expected: 'Golden-vector tests for every formula, classifier truth table, ablation over archetypes × profiles, run in CI.',
+    current: 'backend/scripts/ has only make_sample_pdf.py. run_ablation.py and test_phase0–3.py (cited as “10/10 PASS”, “14/14 PASS”) exist in no branch. backend/data/math_items.json and passages.json are orphan one-record files.',
+    ev: 'docs/PHASE_LEARNINGS.md:715-727,956-961 · git ls-files' },
+  { id: 'S15', m: 'DASE', cat: 'Telemetry', sev: 'Medium', pat: 'Supporting', st: 'partial',
+    title: 'Dead/unauthenticated inputs: timeToFirstInteractionMs unused; sendBeacon flush always 401',
+    expected: 'Every collected signal influences a decision; tab-close flush authenticated.',
+    current: 'classify_error accepts time_to_first_interaction_ms and never reads it. navigator.sendBeacon cannot send Authorization so the visibilitychange flush is a silent no-op (the code comments admit it).',
+    ev: 'dase_engine.py:119 · telemetry.ts:154-171' },
+  { id: 'S16', m: 'DASE', cat: 'Telemetry', sev: 'Medium', pat: 'Baseline', st: 'partial',
+    title: 'Error-breakdown endpoint is misleading and N+1',
+    expected: 'Report actual sessions scanned; batch reads.',
+    current: '"sessionsScanned": limit is echoed even if fewer exist; one Firestore query per session.',
+    ev: 'routers/evaluation.py:131-151' },
+  { id: 'S17', m: 'DASE', cat: 'Data quality', sev: 'Medium', pat: 'Supporting', st: 'partial',
+    title: 'Degraded (spaCy-fallback) quizzes pollute DASE; fallback quality',
+    expected: 'degraded quizzes excluded from evaluation; fallback questions correct.',
+    current: 'QuizPage ignores the response’s degraded flag. Fallback true/false items always have answer "True"; en_core_web_sm is not in requirements.txt, so on a clean deploy the fallback silently returns [] on OSError.',
+    ev: 'quiz_gen.py:188-193,229 · requirements.txt · QuizPage.tsx:52-55' },
+  { id: 'S18', m: 'DASE', cat: 'Telemetry', sev: 'High', pat: 'Supporting', st: 'done',
+    title: 'Telemetry ingest: idempotent batch writes, per-type validation, server timestamps',
+    expected: 'Re-sent batches never double-count; bad events skipped, not fatal.',
+    current: 'Deterministic q_{id}_{attempts} keys, EventBatch cap 100, serverTs authoritative. (Ownership checks missing — A02.)',
+    ev: 'backend/routers/telemetry.py:32-101' },
+
+  { id: 'S19', m: 'DASE', cat: 'DASE formula', sev: 'Medium', pat: 'Supporting', st: 'partial',
+    title: 'LRN_VEL cannot tell a perfect student from an all-wrong one',
+    expected: 'A learning-velocity signal that is neutral-or-high for sustained mastery and only low for decline.',
+    current: 'LRN_VEL = 0.5 + (acc₂ − acc₁)/2. Verified: all-correct → 0.50 and all-wrong → 0.50 (ceiling/floor effect). It carries 0.10–0.25 weight in all 13 profiles, so top performers are pulled to the midpoint.',
+    ev: 'dase_engine.py:388-394 · verified by run' },
+  { id: 'S20', m: 'DASE', cat: 'Telemetry', sev: 'Medium', pat: 'Supporting', st: 'missing',
+    title: 'ReadingEvent is never emitted, so READ_FL is unreachable; READ_FL ignores comprehension',
+    expected: 'Reader emits wordsRead/elapsed/replays/pauses; READ_FL relates speed to comprehension as its definition says.',
+    current: 'No page calls track({type:"reading"}) or startSession("reading"). READ_FL is computed from wpm/200 only although _parameters defines it as “words-per-minute against comprehension”.',
+    ev: 'dase_engine.py:401-409 · data/dase_profiles.json:28 · LearningPage.tsx (no telemetry)' },
+
+  /* ───────── EXP ───────── */
+  { id: 'E01', m: 'EXP', cat: 'Dyscalculia', sev: 'High', pat: 'Supporting', st: 'missing',
+    title: 'Interactive math manipulatives',
+    expected: 'Keyboard-operable number line, ten-frame, fraction bars, base-ten blocks with spoken state.',
+    current: 'None (frontend/src/components/math does not exist).',
+    ev: 'docs/DISABILITY_RESEARCH.md:108-111' },
+  { id: 'E02', m: 'EXP', cat: 'Dyscalculia', sev: 'High', pat: 'High novelty', st: 'missing',
+    title: 'Micro-step breakdown pipeline with deterministic verification and error typing',
+    expected: 'LLM decomposes a problem into one-operation steps; each step is checked by a safe evaluator; wrong answers typed (place-value, operation confusion, fact recall, sequencing, carry/borrow).',
+    current: 'Only a prose prompt profile exists (one operation per sentence). No solver, no verifier, no conceptual-vs-procedural error analysis; data/math_items.json is a single placeholder item.',
+    ev: 'nlp_simplify.py:76-80 · data/math_items.json' },
+  { id: 'E03', m: 'EXP', cat: 'Dyscalculia', sev: 'Medium', pat: 'Supporting', st: 'missing',
+    title: 'Multi-sensory math TTS (spoken step + animated visual in sync)',
+    expected: 'Number words, place-value narration, manipulative highlighted on utterance boundary.',
+    current: 'Not built.',
+    ev: '—' },
+  { id: 'E04', m: 'EXP', cat: 'Dysgraphia', sev: 'High', pat: 'High novelty', st: 'missing',
+    title: 'Voice-to-structured-essay pipeline',
+    expected: 'Continuous dictation → outline + paragraphs that add no new facts → student approves/edits.',
+    current: 'Not built; no STT exists in the frontend at all.',
+    ev: 'docs/DISABILITY_RESEARCH.md:113-116' },
+  { id: 'E05', m: 'EXP', cat: 'Dysgraphia', sev: 'High', pat: 'High novelty', st: 'missing',
+    title: 'Separate scoring: knowledge demonstrated vs writing quality',
+    expected: 'KNOW (concept coverage with evidence spans) scored; EXPR (organisation/mechanics) reported diagnostic-only under dysgraphia.',
+    current: 'WRIT_EXP is declared (0.15) with no source; quiz_gen has no open-response type to score.',
+    ev: 'data/dase_profiles.json:164-173 · quiz_gen.py:22' },
+  { id: 'E06', m: 'EXP', cat: 'Fairness', sev: 'High', pat: 'Supporting', st: 'missing',
+    title: 'Spelling is scored as knowledge: fill-in-the-blank is exact string match',
+    expected: 'Construct-irrelevant variance removed for dyslexia/dysgraphia/motor: options offered and/or fuzzy + phonetic matching.',
+    current: 'userAnswer.toLowerCase() === answer.toLowerCase(); “photosynthesys” is wrong. Directly contradicts the DASE premise for the two profiles it exists to protect.',
+    ev: 'QuizPage.tsx:92-95,342-353' },
+  { id: 'E07', m: 'EXP', cat: 'Anxiety', sev: 'High', pat: 'Supporting', st: 'missing',
+    title: 'Calming UI mode (no red/timers/score-shame, softer motion)',
+    expected: 'calmMode preference: neutral palette, hidden running score, encouraging non-punitive copy.',
+    current: 'Only the anxiety text-simplification/quiz-phrasing profiles exist (content side). Quiz summary shows an error-coloured “Missed” card; no calm toggle in Prefs.',
+    ev: 'types/profile.ts:34-45 · QuizPage.tsx:212-216' },
+  { id: 'E08', m: 'EXP', cat: 'Anxiety', sev: 'High', pat: 'Supporting', st: 'missing',
+    title: 'Micro-assessments (3–4 question blocks, pause/stop points, confidence-rebuild step-down)',
+    expected: 'Quiz delivered in short blocks with explicit “pause / continue / stop here”.',
+    current: 'One uninterrupted run of 9–10 questions.',
+    ev: 'QuizPage.tsx:34 · quiz_gen.py:28' },
+  { id: 'E09', m: 'EXP', cat: 'Processing speed', sev: 'High', pat: 'Supporting', st: 'partial',
+    title: 'Non-timed mode is accidental, not a declared, guaranteed mode',
+    expected: 'untimed preference: no clocks anywhere, timedOut never generated, PROCESSING_DELAY only by ratio.',
+    current: 'No timers exist today so quizzes are effectively untimed, but nothing declares or protects it and classify_error still has a timed_out branch.',
+    ev: 'dase_engine.py:152-153' },
+  { id: 'E10', m: 'EXP', cat: 'Processing speed', sev: 'High', pat: 'High novelty', st: 'missing',
+    title: 'Auto-pacing engine (reading speed & latency → delivery rate)',
+    expected: 'Personal WPM/TTS rate/chunk size adapt from measured reading and response behaviour.',
+    current: 'WPM is a manual slider defaulting to 200; ReadingEvents are never emitted. ROADMAP folded pacing into TIME_EFF, which (S09) does not use a cross-session baseline.',
+    ev: 'LearningPage.tsx:33,244 · docs/ROADMAP.md:39' },
+  { id: 'E11', m: 'EXP', cat: 'Anxiety', sev: 'High', pat: 'High novelty', st: 'partial',
+    title: 'Stress / hesitation detection from interaction patterns (no facial inference)',
+    expected: 'Interaction-only hesitation index with gentle, opt-in interventions; never labelled “anxiety”.',
+    current: 'Only a per-turn LLM frustration score from the chatbot drives Eye’s banner. No interaction-derived signal, nothing persisted, so it cannot feed FRUST/RESIL or teacher view.',
+    ev: 'app.py:161-190 · Eye.tsx:105-111' },
+  { id: 'E12', m: 'EXP', cat: 'Content', sev: 'Medium', pat: 'Supporting', st: 'partial',
+    title: 'low_vision, hard_of_hearing, dysgraphia, motor fall back to the default content profile',
+    expected: 'Dedicated simplify + quiz-format profiles.',
+    current: 'Scored by DASE but content is generated with “default” rules (docs/ROADMAP.md table).',
+    ev: 'nlp_simplify.py:35-92 · quiz_gen.py:50-82' },
+  { id: 'E13', m: 'EXP', cat: 'Dyscalculia', sev: 'Medium', pat: 'Supporting', st: 'done',
+    title: 'Dyscalculia / anxiety / intellectual / dyslexia text + quiz profiles',
+    expected: 'Prompt profiles that encode documented barriers.',
+    current: 'One-operation-per-sentence, countable quantities, no pressure language; validated against a base rule set that forbids dropping facts.',
+    ev: 'nlp_simplify.py:25-92' },
+
+  /* ───────── TEACH ───────── */
+  { id: 'T01', m: 'TEACH', cat: 'Visualisation', sev: 'High', pat: 'High novelty', st: 'missing',
+    title: 'No radar chart of DASE parameters',
+    expected: 'Radar of the parameter vector (diagnostic-only shown distinctly) vs a guarded reference.',
+    current: 'TeacherDashboardPage has no radar; the per-parameter breakdown returned by the API is never displayed. Only a single % score per student.',
+    ev: 'TeacherDashboardPage.tsx (no RadarChart) · roster table :301-309' },
+  { id: 'T02', m: 'TEACH', cat: 'Visualisation', sev: 'High', pat: 'High novelty', st: 'partial',
+    title: 'Error-cause view is text pills, and empty until S03 is fixed',
+    expected: 'Donut + trend of the four causes with confidence and an explicit “unclassified” slice.',
+    current: 'errorBreakdownCombined rendered as chips (:372-383). Given S03 the data is always empty.',
+    ev: 'TeacherDashboardPage.tsx:372-383' },
+  { id: 'T03', m: 'TEACH', cat: 'Data', sev: 'High', pat: 'Supporting', st: 'mock',
+    title: 'Focus & frustration panels read collections nothing writes',
+    expected: 'Charts reflect real sessions.',
+    current: '/analytics/log-session/ has zero callers, so telemetry_sessions is empty: “Avg Focus” is always “—”, the focus donut and “Frustration Alert” never render. (Quiz scores do work via log-quiz.)',
+    ev: 'app.py:450-467 · TeacherDashboardPage.tsx:117-172,339-347' },
+  { id: 'T04', m: 'TEACH', cat: 'Honesty', sev: 'Medium', pat: 'Supporting', st: 'partial',
+    title: 'Coverage is fetched but not shown next to the score',
+    expected: 'Every DASE score displayed with its coverage and “face-presence, not attention” wording.',
+    current: 'RosterEntry.coverage is loaded and dropped; the roster shows “72 %” with no coverage. PROJECT_EXPLANATION §5 says never to do this.',
+    ev: 'TeacherDashboardPage.tsx:25-30,301-309 · docs/PROJECT_EXPLANATION.md:427-429' },
+  { id: 'T05', m: 'TEACH', cat: 'Performance', sev: 'Medium', pat: 'Baseline', st: 'partial',
+    title: 'N+1 legacy analytics calls; /api/analytics/class unused',
+    expected: 'One roster call + one class call.',
+    current: 'One /teacher/analytics/{uid} request per student on load, plus roster; class aggregates endpoint has no consumer.',
+    ev: 'TeacherDashboardPage.tsx:68-82' },
+  { id: 'T06', m: 'TEACH', cat: 'Accessibility', sev: 'High', pat: 'Baseline', st: 'missing',
+    title: 'Charts have no text alternative',
+    expected: 'Every chart: role=img + summary, data table twin, non-colour encoding (WCAG 1.1.1, 1.4.1).',
+    current: 'Recharts SVGs only; tooltips are hover-only.',
+    ev: 'TeacherDashboardPage.tsx · components/Charts.tsx' },
+  { id: 'T07', m: 'TEACH', cat: 'Patent dossier', sev: 'High', pat: 'High novelty', st: 'missing',
+    title: 'No automated claim summary / evidence dossier',
+    expected: 'Generated claim chart: claim element → code → test → sample output, formula sheet with config hash, ablation results, caveats.',
+    current: 'Nothing beyond hand-written docs (which contain the full formulas; the CORS list also references a hosted Vercel deployment).',
+    ev: 'docs/PROJECT_EXPLANATION.md · backend/app.py:619-624' },
+  { id: 'T08', m: 'TEACH', cat: 'Patent dossier', sev: 'Critical', pat: 'High novelty', st: 'missing',
+    title: 'Reduction-to-practice evidence is thin: DASE code is staged-not-committed; docs describe unbuilt features',
+    expected: 'Dated commit history for each novelty; docs match code; unbuilt claims labelled as such.',
+    current: 'dase_engine.py, evaluation/telemetry/analytics/voice routers, dase_profiles.json are all in the index only (status “A”, 17 commits total, none contain them). PHASE_LEARNINGS marks Phases 3–5 “complete” with files that exist in no branch — an enablement/credibility problem for any filing.',
+    ev: 'git status · docs/PHASE_LEARNINGS.md:793-1000' },
+  { id: 'T09', m: 'TEACH', cat: 'Integrity', sev: 'Medium', pat: 'Supporting', st: 'missing',
+    title: 'Teacher weight-override UI + audit log viewer',
+    expected: 'Teachers adjust weights per student with reason; changes logged and visible.',
+    current: 'Promised in config, absent everywhere (see S11).',
+    ev: 'data/dase_profiles.json:3-4' },
+  { id: 'T10', m: 'TEACH', cat: 'Scoping', sev: 'High', pat: 'Supporting', st: 'done',
+    title: 'Roster, per-student DASE detail, class aggregates and recommendations scoped to the calling teacher',
+    expected: '404 (not silent empty) outside the roster.',
+    current: 'analytics.py reuses one roster query for all four endpoints; student detail 404s off-roster.',
+    ev: 'backend/routers/analytics.py:38-243' },
+  { id: 'T11', m: 'TEACH', cat: 'Recommendations', sev: 'Medium', pat: 'Supporting', st: 'done',
+    title: 'AI teaching suggestions grounded in numbers, cached per evaluation, degraded path',
+    expected: 'LLM restricted to supplied data, never treats DASE as a grade.',
+    current: 'RECOMMENDATION_SYSTEM prompt + recommendation_cache + LLMUnavailable fallback.',
+    ev: 'backend/routers/analytics.py:178-243' },
+];
+
+/* ───────────── PHASES ───────────── */
+const PHASES = [
+  { id: 1, name: 'Auth & Teacher–Student Mapping Overhaul', short: 'Auth & Mapping', module: 'AUTH',
+    goal: 'Only admin-provisioned accounts exist; first login forces a new password; every teacher/student read is scoped server-side.',
+    order: 'Do first. Nothing in Phases 3–5 is defensible while any teacher can read any child’s data.' },
+  { id: 2, name: 'BVI Voice-First Core', short: 'BVI Voice-First', module: 'BVI',
+    goal: 'A blind student hears where they are the moment the site opens, can navigate, read, answer and chat by voice or screen reader, and the camera never turns on for them.',
+    order: 'Needs Phase 1’s consent/profile guarantees. Produces the VoiceEvent stream Phase 3 consumes.' },
+  { id: 3, name: 'DASE & Telemetry Calculation Engine', short: 'DASE & Telemetry', module: 'DASE',
+    goal: 'Every DASE parameter is computed from measured behaviour, the classifier runs on real signals, the maths is correct and the whole thing is test-backed.',
+    order: 'Formula fixes (P3-06/07/10) can start in parallel with Phase 1; telemetry wiring needs Phase 2’s hooks.' },
+  { id: 4, name: 'Expanded Disability Support', short: 'Expanded Profiles', module: 'EXP',
+    goal: 'Deaf visual channel, dyscalculia tools, dysgraphia voice-to-essay with split scoring, anxiety and processing-speed support — each feeding real DASE parameters.',
+    order: 'Builds on Phase 3’s parameter definitions (RESIL, VIS_ENG, KNOW/EXPR).' },
+  { id: 5, name: 'Teacher Analytics & Patent Dossier', short: 'Analytics & Dossier', module: 'TEACH',
+    goal: 'Radar + error-cause visuals on real data, honest coverage labelling, accessible charts, and a generated claim-support dossier.',
+    order: 'Evidence hygiene (P5-07) should be done NOW, before further code is written.' },
+];
+
+/* ───────────── TASKS ─────────────
+   files: [action, path]  action ∈ create | modify | delete
+   closes: gap ids this task contributes to (progress accrues proportionally)
+   snip: key into SNIPPETS (rendered under the task) */
+const TASKS = [
+  /* ═════════ PHASE 1 ═════════ */
+  { id: 'P1-01', phase: 1, title: 'Close public sign-up; remove client-side role writes and demo shortcuts', days: 1, closes: ['A03', 'A04'],
+    files: [['modify', 'frontend/src/App.tsx'], ['modify', 'frontend/src/pages/RegisterPage.tsx'], ['modify', 'frontend/src/components/AuthForm.tsx'], ['modify', 'frontend/.env.example']],
+    steps: [
+      'Delete the /register route (or gate it behind VITE_ALLOW_SELF_SIGNUP=true for local dev only).',
+      'Strip isRegister branch, role dropdown, client setDoc(users/…) and the “Demo Access” block from AuthForm (lines 31, 87-100, 306-340).',
+      'In the Firebase console disable “Enable create (sign-up)” (Authentication → Settings → User actions; Identity Platform projects) so the Admin SDK is the only creator.',
+      'Login field accepts “email or username” — if no “@”, append VITE_STUDENT_EMAIL_DOMAIN (children rarely have email).'],
+    accept: 'Direct call to Firebase createUserWithEmailAndPassword from the browser console fails; /register 404s in production build.' },
+
+  { id: 'P1-02', phase: 1, title: 'Firestore security rules + emulator tests', days: 1.5, closes: ['A03'], snip: 'rules',
+    files: [['create', 'firestore.rules'], ['create', 'firebase.json'], ['create', 'frontend/tests/firestore.rules.test.ts']],
+    steps: [
+      'Deny by default. users/{uid}: owner may read; mapped teacher (resource.data.teacherId) and admin may read; owner may update ONLY profile, displayName, consent.',
+      'create/delete on users: Admin SDK only (rules cannot be satisfied by clients).',
+      'Test with @firebase/rules-unit-testing: student cannot set role, cannot read another student, teacher cannot read unmapped student.'],
+    accept: 'Rules tests run in CI; writing {role:"admin"} from a student token is denied.' },
+
+  { id: 'P1-03', phase: 1, title: 'Remove hard-coded credentials, import-time seeding and email→role auto-provisioning', days: 1, closes: ['A04', 'A10'],
+    files: [['modify', 'backend/app.py'], ['modify', 'backend/auth.py'], ['create', 'backend/scripts/create_admin.py'], ['create', 'backend/scripts/seed_demo.py']],
+    steps: [
+      'Delete ADMIN_EMAIL/ADMIN_PASSWORD and the _seed_demo_data() call from app.py:28-84. Move seeding to scripts/seed_demo.py, refuse to run unless ENV != production, read passwords from env.',
+      'scripts/create_admin.py prompts for email and generates a strong password once (getpass), sets status "pending_first_login".',
+      'auth.verify_role: remove _DEMO_ROLE_MAP and the auto-provision branch — a missing users/{uid} returns 403 PROFILE_MISSING.',
+      'Rotate any password that has ever been deployed (admin@123, student@123, teacher@123).'],
+    accept: 'grep -R "admin@123|student@123|teacher@123" returns nothing; a fresh Firebase user without a profile gets 403.' },
+
+  { id: 'P1-04', phase: 1, title: 'Users v2 schema, enrollments, admin provisioning API (single + CSV bulk, reassign, reset, disable, audit)', days: 3, closes: ['A05', 'A07', 'A09'], snip: ['schema', 'provision'],
+    files: [['create', 'backend/routers/admin.py'], ['create', 'backend/services/accounts.py'], ['modify', 'backend/models/schemas.py'], ['modify', 'backend/app.py'], ['create', 'backend/scripts/migrate_users_v2.py']],
+    steps: [
+      'Schema per the snippet: role, username, status, mustChangePassword, teacherId, gradeLevel, createdBy, plus enrollments/{teacherId_studentId} for co-teachers and audit_log/{id}.',
+      'POST /api/admin/users → validates teacherId points at a user with role teacher and status active; generates a temp password with secrets (unambiguous alphabet, 12 chars, grouped); returns it ONCE in the response for the hand-off sheet.',
+      'POST /api/admin/users/bulk (CSV: role,name,username,grade,teacher_email) with per-row result report.',
+      'PATCH /api/admin/students/{uid}/teacher (reassign; closes old enrollment, opens new, audit row). POST /reset-password (new temp, re-arms flag, revoke_refresh_tokens). POST /disable.',
+      'Move /admin/create-user and /admin/users out of app.py; keep old paths as thin aliases for one release.',
+      'migrate_users_v2.py dual-writes teacher_id→teacherId, grade_level→gradeLevel; existing queries keep working until P1-06 lands.'],
+    accept: 'Creating a student without a valid teacher returns 422; every admin action produces an audit_log row.' },
+
+  { id: 'P1-05', phase: 1, title: 'Forced first-login password change (server-enforced)', days: 2, closes: ['A06'], snip: ['firstlogin', 'firstloginFe'],
+    files: [['modify', 'backend/auth.py'], ['create', 'backend/routers/auth_flow.py'], ['create', 'frontend/src/pages/FirstLoginPage.tsx'], ['modify', 'frontend/src/components/RoleGate.tsx'], ['modify', 'frontend/src/components/AuthForm.tsx'], ['modify', 'frontend/src/services/api.ts'], ['modify', 'frontend/src/App.tsx']],
+    steps: [
+      'Backend is the source of truth: require_active_user reads users/{uid} (TTL-cached ~15 s) and returns 403 {code:"PASSWORD_CHANGE_REQUIRED"} for every route except POST /api/auth/first-login-password. Also blocks status=="disabled".',
+      'POST /api/auth/first-login-password: policy check (≥10 chars or 3-word passphrase, ≠ temp, not on a small deny-list) → firebase_auth.update_user(uid, password=…), clear flag, stamp passwordChangedAt, revoke_refresh_tokens.',
+      'Do the change server-side (not client updatePassword) so a client cannot skip it; then sign the user out and back in with the new password.',
+      'Frontend: AuthForm/RoleGate redirect to /first-login when users/{uid}.mustChangePassword is true; axios interceptor maps the 403 code to the same redirect. Page is fully labelled, announces requirements via aria-live and never shows the temp password.',
+      'Switch verify_firebase_token to firebase_auth.verify_id_token(token, check_revoked=True) (or check status each request) so reset/disable takes effect immediately.'],
+    accept: 'With a temp credential, every API returns 403 PASSWORD_CHANGE_REQUIRED except the change endpoint; after the change the old password fails.' },
+
+  { id: 'P1-06', phase: 1, title: 'require_teacher_of(student_id) dependency; retire the unscoped teacher endpoint', days: 1, closes: ['A01'], snip: 'deps',
+    files: [['modify', 'backend/auth.py'], ['modify', 'backend/app.py'], ['modify', 'frontend/src/pages/TeacherDashboardPage.tsx']],
+    steps: [
+      'Add can_access_student(user, student_id): student==self, teacher with an active enrollment / teacherId match, or admin.',
+      'Apply to /teacher/analytics/{id} (or delete it and point the dashboard at /api/analytics/student/{id}, which already scopes), /api/evaluation/{id}, /api/evaluation/{id}/errors.',
+      'Return 404 (not 403) for off-roster ids to avoid confirming existence.'],
+    accept: 'Teacher B requesting Teacher A’s student id gets 404 on every endpoint (automated test).' },
+
+  { id: 'P1-07', phase: 1, title: 'Session ownership checks on all telemetry/evaluation routes', days: 1, closes: ['A02'], snip: 'deps',
+    files: [['modify', 'backend/routers/telemetry.py'], ['modify', 'backend/routers/evaluation.py']],
+    steps: [
+      '_assert_session_access(session_id, user): load sessions/{id}; allow owner, mapped teacher, admin.',
+      'ingest_events: verify the session belongs to the caller before writing; ignore any client studentId.',
+      'end_session / get_events / evaluate: same check. Reject events whose sessionId differs from the batch’s verified session.'],
+    accept: 'A student token posting events to another student’s sessionId gets 403; existing quiz flow unaffected.' },
+
+  { id: 'P1-08', phase: 1, title: 'Self-service Account page for every role (name, username, password, support profile)', days: 2, closes: ['A08'],
+    files: [['create', 'frontend/src/pages/AccountPage.tsx'], ['modify', 'frontend/src/components/Layout.tsx'], ['modify', 'frontend/src/App.tsx'], ['create', 'backend/routers/me.py']],
+    steps: [
+      'Route /account for student, teacher and admin; Settings stays student-only for accessibility prefs but is linked from Account.',
+      'Password change: reauthenticateWithCredential + updatePassword (recent-login requirement) with a screen-reader-friendly form.',
+      'PATCH /api/me for displayName and username (uniqueness check; updates the synthetic login email through the Admin SDK); email change via verifyBeforeUpdateEmail for roles that have real email.',
+      'Show teacher name/contact to the student (“Your teacher: …”) — read-only, from the mapping.'],
+    accept: 'A student can change username and password and log in with them; a teacher can change password.' },
+
+  { id: 'P1-09', phase: 1, title: 'Admin UI: required teacher, one-time credential sheet, reassign, unmapped filter, reset/disable', days: 2, closes: ['A07', 'A05'],
+    files: [['modify', 'frontend/src/pages/AdminDashboardPage.tsx'], ['create', 'frontend/src/components/admin/CredentialSheet.tsx'], ['create', 'frontend/src/components/admin/UserTable.tsx']],
+    steps: [
+      'Make teacher required for students; show an “Unassigned students” count and filter.',
+      'After create/reset, show a print-friendly credential sheet (username, temp password, login URL) once; a Copy button and an aria-live “copied” message. Include a text-to-speech “read to child” button for the passphrase form.',
+      'Row actions: Reassign, Reset password, Disable — each with confirmation dialogs (focus-trapped, labelled).',
+      'Replace hover-only affordances; labels for every input (the create form currently uses unlabeled <label> siblings).'],
+    accept: 'Cannot submit a student without a teacher; credential sheet disappears on navigation and is never stored client-side.' },
+
+  { id: 'P1-10', phase: 1, title: 'Hygiene: remove console secrets, CORS from config, camelCase migration cut-over', days: 0.5, closes: ['A11', 'A12'],
+    files: [['modify', 'frontend/src/services/firebase.ts'], ['modify', 'backend/app.py'], ['modify', 'backend/config.py']],
+    steps: ['Delete the two console.log lines (firebase.ts:16-17).', 'Use config.CORS_ORIGINS in add_middleware; add the Vercel origin via env, not code.', 'After migrating, drop teacher_id/grade_level reads.'],
+    accept: 'Production bundle logs no configuration; CORS is env-driven.' },
+
+  /* ═════════ PHASE 2 ═════════ */
+  { id: 'P2-01', phase: 2, title: 'Shared speech services: sentence-level TTS, STT wrapper, Web-Audio earcons, activation unlock', days: 2, closes: ['B05', 'B14', 'B04'], snip: 'speech',
+    files: [['create', 'frontend/src/services/speech.ts'], ['modify', 'frontend/src/services/tts.ts'], ['modify', 'frontend/src/services/stt.ts'], ['create', 'frontend/src/services/earcons.ts']],
+    steps: [
+      'One module owns speechSynthesis: queue, cancel, priority (STOP/Esc always wins), sentence-level utterances with onboundary callbacks (also sidesteps Chrome’s long-utterance cut-off).',
+      'STT wrapper over SpeechRecognition/webkitSpeechRecognition: one-shot and continuous, exposes confidence and interim results, feature-detected.',
+      'AudioContext created lazily and resumed inside the first user gesture; earcons for heading, content tick, question, mic-open (rising), not-understood (falling).',
+      'Replace the ad-hoc speechSynthesis calls in LearningPage, Eye and AccessibleNotification with this module; turn the 16 stubs into real code or delete them.'],
+    accept: 'No component calls window.speechSynthesis directly (lint rule).' },
+
+  { id: 'P2-02', phase: 2, title: 'VoiceBootstrap: spoken orientation on site entry that respects autoplay policy', days: 2, closes: ['B02'], snip: 'bootstrap',
+    files: [['create', 'frontend/src/components/VoiceBootstrap.tsx'], ['modify', 'frontend/src/App.tsx'], ['modify', 'frontend/src/pages/LoginPage.tsx']],
+    steps: [
+      'Browsers block speechSynthesis and AudioContext until user activation, so “speak on load” cannot be unconditional. The pattern: (1) auto-focused, visually-hidden-until-focus button + polite live region announce the mode to any screen reader instantly; (2) the first keydown/pointerdown anywhere unlocks audio and starts the spoken welcome.',
+      'Remember the choice per device (localStorage eduease.voiceFirst) and, after login, in profile.prefs.voiceFirst — so returning users get the welcome on the first keypress.',
+      'First-ever visit: first focusable element on the login page is “Press V for voice-first mode”. Do NOT try to detect assistive tech (privacy; unreliable).',
+      'Welcome script (≤10 s): product name, where they are, how to log in, “say or press H for help”. Keep long descriptions behind “what’s on this page”.',
+      'Log-in by voice is not offered for the password (shoulder-surfing/privacy); the form fields are read out as they receive focus.'],
+    accept: 'Fresh Chrome profile: press any key on the login page → welcome spoken within 1 s; with NVDA running and engine=“my screen reader” the app never calls speechSynthesis.' },
+
+  { id: 'P2-03', phase: 2, title: 'Landmarks, skip link, RouteAnnouncer (focus + title + one announcement), live-region fix', days: 1.5, closes: ['B03', 'B11'], snip: ['announcer'],
+    files: [['modify', 'frontend/src/components/Layout.tsx'], ['create', 'frontend/src/components/RouteAnnouncer.tsx'], ['modify', 'frontend/src/components/AccessibleNotification.tsx'], ['modify', 'frontend/src/components/RoleGate.tsx'], ['modify', 'frontend/src/index.css']],
+    steps: [
+      'Skip link (“Skip to main content”) as the first focusable element on every page, including auth pages; <main id="main-content" tabIndex={-1}> everywhere; <nav aria-label="Primary">; aria-current="page".',
+      'RouteAnnouncer: on pathname change set document.title, move focus to the page <h1>, and announce “{title}. {short summary}” once — either via focus OR the live region depending on engine, never both.',
+      'AccessibleNotification: always render the live container (empty), drop the inner role=status; use assertive only for errors.',
+      'RoleGate loading state: <div role="status">Loading…</div>. Visible :focus-visible ring (≥3:1) and 24×24 px minimum target (WCAG 2.5.8).'],
+    accept: 'axe-core reports no “region”, “bypass”, “page-has-heading-one” violations on any route; NVDA reads a title on every route change.' },
+
+  { id: 'P2-04', phase: 2, title: 'VoiceNavigator: global voice layer with rules-first intents, LLM fallback, barge-in and VoiceEvent telemetry', days: 4, closes: ['B01'], snip: 'voicenav',
+    files: [['create', 'frontend/src/components/VoiceNavigator.tsx'], ['create', 'frontend/src/services/voiceIntents.ts'], ['create', 'frontend/src/hooks/useVoiceCommand.ts'], ['modify', 'frontend/src/services/telemetry.ts'], ['create', 'backend/tests/test_intent_drift.py']],
+    steps: [
+      'voiceIntents.ts mirrors services/intent.py rules and ROUTES (STOP first). A pytest parses both files and fails on drift — the docs record this guard as part of the design.',
+      'Push-to-talk (Ctrl+Shift+V) always available; hands-free is opt-in (an always-open mic is a privacy/battery cost).',
+      'Flow: earcon(mic-open) → STT → local rules → else POST /api/voice/intent (allowLlm) → act → speak read-back (“Selected B. … Say submit to confirm.”). Escape/“stop” cancels speech immediately.',
+      'useVoiceCommand(intent, handler) lets pages (Quiz, Learning) subscribe to READ_NEXT/REPEAT/ANSWER/SUBMIT/EXPLAIN/FASTER/SLOWER without prop drilling.',
+      'Emit VoiceEvent {transcript, sttConfidence, intent, intentSource, intentConfidence, understood, repeats, actionMs, route} into the ACTIVE learning session (not a synthetic voice-{uid} session) — this is what P3-05 consumes.',
+      'Copy VOICE_Q/NAV_EFF framing: they measure the interface, never the learner.'],
+    accept: '21/21 core commands resolve on rules alone; “answer B → submit” completes a quiz item without touching the keyboard or mouse.' },
+
+  { id: 'P2-05', phase: 2, title: 'Audio orientation: heading/content/question tones, progress milestones, “where am I”', days: 1.5, closes: ['B04'],
+    files: [['create', 'frontend/src/hooks/useReadingProgress.ts'], ['create', 'frontend/src/config/pageRegistry.ts'], ['modify', 'frontend/src/pages/LearningPage.tsx']],
+    steps: [
+      'Tone map: heading = rising two-tone; paragraph boundary = soft tick; question = three-note motif; mic-open rising, not-understood falling. Keep < 300 ms and volume-capped; tones are additive to, not a replacement for, speech.',
+      'useReadingProgress announces at 25/50/75/100 % and on “progress” (“Sentence 12 of 30, 40 percent”). Never announce on every sentence.',
+      'pageRegistry.ts is the single source for route → title, short summary, long “what can I do here” text and voice targets (replaces hard-coded PAGE_SUMMARIES; also feeds RouteAnnouncer and a generated intent ROUTES test).'],
+    accept: 'Blindfolded participant can state which page they are on and roughly how far through the text they are, unaided (usability task).' },
+
+  { id: 'P2-06', phase: 2, title: 'Rebuild the reading engine: boundary-synced highlight, auto-start, inline image descriptions, resumable lessons', days: 3, closes: ['B05', 'B09', 'B10'],
+    files: [['modify', 'frontend/src/pages/LearningPage.tsx'], ['create', 'frontend/src/components/reader/ReaderView.tsx'], ['modify', 'frontend/src/components/UploadForm.tsx'], ['modify', 'frontend/src/App.tsx'], ['modify', 'backend/app.py']],
+    steps: [
+      'Split text into sentences once; speakSentences() drives currentSentence/currentWord from onboundary; WPM/timer is only the fallback when the voice gives no boundary events.',
+      'Auto-start when prefs.voiceFirst || prefs.ttsEnabled as soon as the lesson is ready; pause on tab blur; resume on “continue”.',
+      'Insert image descriptions into the utterance queue at their page position (“Image on page 4: …”), with the failed-description announcement kept.',
+      'Persist the simplified lesson (content/{id}) and route /learning/:contentId with lastSentenceIndex saved on pause — refresh/Back restores the place.',
+      'Remove the per-word aria-label churn; expose one polite “Sentence n of N” status on demand.'],
+    accept: 'Refreshing mid-lesson resumes at the same sentence; highlighted word matches the spoken word within one word.' },
+
+  { id: 'P2-07', phase: 2, title: 'Accessible, voice-operable quiz (QuizCard) incl. options for fill-blank', days: 2.5, closes: ['B07', 'E06'],
+    files: [['create', 'frontend/src/components/QuizCard.tsx'], ['modify', 'frontend/src/pages/QuizPage.tsx']],
+    steps: [
+      'Real QuizCard: fieldset+legend (the question), radio group with roving tabindex, live announcement on question change (“Question 3 of 9, multiple choice. … Options: A …”), focus moved to the legend.',
+      'Show the four fill_blank options as choices for blind, dyslexia, dysgraphia and motor profiles; free-text remains for others.',
+      'ANSWER intent selects, the card reads back the selection, SUBMIT commits; “repeat” re-reads the stem (counts as reRead for telemetry).',
+      'Announce correctness neutrally (“Recorded.”/explanation) — anxiety profiles get the calm variant from P4-12.'],
+    accept: 'A full 9-question quiz completes by voice alone and by keyboard alone; axe clean.' },
+
+  { id: 'P2-08', phase: 2, title: 'Voice-first chatbot', days: 1.5, closes: ['B08'],
+    files: [['modify', 'frontend/src/components/Chatbot.tsx'], ['create', 'frontend/src/components/STTButton.tsx'], ['modify', 'frontend/src/components/TTSControls.tsx']],
+    steps: ['role="dialog" aria-modal focus trap, Escape closes and returns focus to the trigger.', 'Message list is a polite live log with “You said / Assistant replied” prefixes.', 'Mic button (STT), auto-speak replies when voice-first, barge-in on new speech; replace deprecated onKeyPress with onKeyDown.'],
+    accept: 'Ask a question by voice, hear the answer, interrupt it with “stop”.' },
+
+  { id: 'P2-09', phase: 2, title: 'Consent gating for camera & cloud STT; voice settings; language', days: 1.5, closes: ['B06', 'B12', 'B13'],
+    files: [['modify', 'frontend/src/pages/LearningPage.tsx'], ['modify', 'frontend/src/pages/QuizPage.tsx'], ['modify', 'frontend/src/pages/SettingsPage.tsx'], ['modify', 'frontend/src/types/profile.ts'], ['modify', 'frontend/src/main.tsx']],
+    steps: [
+      'Mount <Eye/> only if webcamAllowed(profile) && consent.webcam — otherwise render nothing and never call getUserMedia.',
+      'Prefs additions: voiceFirst, voiceEngine: "app" | "screenReader", speechLang, speechVoice. voiceEngine="screenReader" disables all app speechSynthesis and routes announcements to live regions only.',
+      'Set document.documentElement.lang from i18n and use it for utterance.lang / recognition.lang.',
+      'Consent copy: Chrome/Edge speech recognition sends audio to a cloud service; Firefox/Safari get keyboard-only with a clear message. Bump CONSENT_VERSION and re-prompt.'],
+    accept: 'Blind profile: no camera permission prompt anywhere; consent screen mentions cloud STT.' },
+
+  { id: 'P2-10', phase: 2, title: 'Assistive-technology verification (NVDA, JAWS, VoiceOver, TalkBack) + automated a11y CI', days: 3, closes: ['B01', 'B02', 'B03', 'B07'],
+    files: [['create', 'frontend/tests/a11y/routes.spec.ts'], ['create', 'docs/AT_TEST_PROTOCOL.md'], ['create', '.github/workflows/a11y.yml']],
+    steps: [
+      '@axe-core/playwright over every route in every profile (WCAG 2.2 A/AA tags; log AAA-relevant items separately — 1.4.6 contrast enhanced, 2.2.3 no timing, 2.4.9 link purpose, 3.1.5 reading level).',
+      'Manual protocol: NVDA+Firefox/Chrome, JAWS+Chrome, VoiceOver+Safari, TalkBack; tasks: log in, first-login password change, read a lesson, answer a quiz, ask the chatbot. Record collisions between app TTS and the screen reader (the open risk in PHASE_LEARNINGS §3.7).',
+      'Blindfolded navigation task with ≥5 participants (or partner organisation) — required for the honest claim “verified accessible”, which is otherwise only “built to be accessible”.'],
+    accept: 'Zero critical/serious axe violations; protocol results committed with dates.' },
+
+  /* ═════════ PHASE 3 ═════════ */
+  { id: 'P3-01', phase: 3, title: 'useQuestionTelemetry: measure interaction signals instead of hard-coding them', days: 1.5, closes: ['S03'], snip: 'qtelemetry',
+    files: [['create', 'frontend/src/hooks/useQuestionTelemetry.ts'], ['modify', 'frontend/src/components/QuizCard.tsx'], ['modify', 'frontend/src/pages/QuizPage.tsx']],
+    steps: ['timeToFirstInteractionMs = first pointer/key/voice event after the question is rendered.', 'answerChanges = selections that differ from the previous selection; hintsUsed from explicit hint UI.', 'reRead = TTS replay, voice “repeat”, or returning focus to the stem after touching options; revisits counted the same way.', 'Delete every literal in QuizPage.tsx:99-124.'],
+    accept: 'Unit tests: changing an answer twice yields answerChanges=2; replaying TTS sets reRead=true.' },
+
+  { id: 'P3-02', phase: 3, title: 'Real focus pipeline: per-tick samples, per-question windows, Eye on the quiz (consented)', days: 1.5, closes: ['S04'], snip: 'focus',
+    files: [['modify', 'frontend/src/components/Eye.tsx'], ['modify', 'frontend/src/services/telemetry.ts'], ['modify', 'frontend/src/pages/QuizPage.tsx']],
+    steps: ['Eye calls onSample(onScreen, ts) on every 500 ms tick — raw sample, not the 4 s-debounced UI state.', 'FocusMeter.sample() counts ticks; reset() at question start; read() at submit returns focusRatio only if ≥5 samples (engine’s MIN_FOCUS_SAMPLES).', 'Mount Eye (compact, non-alarming) on QuizPage under the same consent gate; call it face-presence in code, API and UI copy.'],
+    accept: 'A 20 s attentive question yields ~40 samples and focusRatio ≈ 1.0; look-away yields < 0.6.' },
+
+  { id: 'P3-03', phase: 3, title: 'Classify on every wrong answer, persist the label, run the closed loop', days: 3, closes: ['S03', 'S05'], snip: ['closedloop', 'closedloopSchema'],
+    files: [['modify', 'backend/models/schemas.py'], ['modify', 'frontend/src/services/telemetry.ts'], ['modify', 'frontend/src/pages/QuizPage.tsx'], ['modify', 'backend/routers/evaluation.py']],
+    steps: ['Add optional classification {label, confidence, alternatives} and degraded to QuestionEvent (additive change — allowed by the frozen contract) — today Pydantic silently drops it.', 'On an incorrect answer POST /api/classify with priorTimesMs (this session + last N from the baseline store), focus window, answerChanges, reRead.', 'If shouldRepresent, swap in simplerQuestion/Options/Answer, mark isRepresentation, originalQuestionId, attempts+1 (the idempotency key already includes attempts).', 'Declare simplerQuestion fields in the frontend Question type.'],
+    accept: 'A synthetic “fast, present, no re-read” wrong answer shows the simpler item and both events are stored with labels.' },
+
+  { id: 'P3-04', phase: 3, title: 'Server-side re-classification at ingest (single source of truth, tamper resistant)', days: 1, closes: ['S03'],
+    files: [['modify', 'backend/routers/telemetry.py'], ['modify', 'backend/services/dase_engine.py']],
+    steps: ['On ingest, if a wrong QuestionEvent has no label (or classifierVersion differs), compute it from stored raw signals and prior events.', 'Store classifierVersion and configSha256 on every classified event so a score can be reproduced later.'],
+    accept: 'Replaying stored raw events reproduces identical labels.' },
+
+  { id: 'P3-05', phase: 3, title: 'Load VoiceEvents into evaluation so VOICE_Q / NAV_EFF exist in production', days: 1, closes: ['S06'],
+    files: [['modify', 'backend/routers/evaluation.py'], ['modify', 'frontend/src/services/telemetry.ts']],
+    steps: ['Add "voice" to LearningEvent; _load_session_events returns (questions, readings, voices); evaluate passes voice_events to compute_parameters.', 'Blind profile coverage should rise from ~0.63 toward the 0.84 documented once voice data exists.'],
+    accept: 'A session with ≥3 voice commands yields VOICE_Q and NAV_EFF in the stored evaluation.' },
+
+  { id: 'P3-06', phase: 3, title: 'Correct the formulas: ADJ_ACC, CONSIST, TIME_EFF, TASK_COMP (+ authenticated tab-close flush)', days: 2.5, closes: ['S07', 'S08', 'S09', 'S10', 'S15', 'S19'], snip: 'formulas',
+    files: [['modify', 'backend/services/dase_engine.py'], ['create', 'backend/services/baselines.py'], ['modify', 'backend/routers/evaluation.py'], ['modify', 'frontend/src/services/telemetry.ts']],
+    steps: ['ADJ_ACC: emit when there are no wrong answers or ≥80 % of wrong answers are classified.', 'CONSIST: replace 1−4·p(1−p) with pace stability (coefficient of variation of correct-answer times) blended with cross-session accuracy stability.', 'TIME_EFF: correct answers only, against student_baselines/{uid} (median of last ≥20 answers across sessions, per difficulty band when ≥8 each).', 'TASK_COMP: completed ÷ started over the last N sessions; abandoned sessions closed via fetch(..., {keepalive:true}) with the bearer token on visibilitychange/pagehide (sendBeacon cannot carry Authorization).', 'LRN_VEL: treat sustained mastery (both halves ≥ 0.9) as 0.75–1.0 rather than 0.5, or drop the parameter when the ceiling applies.', 'Use or remove timeToFirstInteractionMs in classify_error (proposal: very long pre-interaction latency + fast answer → hesitation signal).'],
+    accept: 'Golden-vector tests in P3-09 pass; all-wrong session no longer scores CONSIST 1.0.' },
+
+  { id: 'P3-07', phase: 3, title: 'Define and implement the dead-weight parameters: PATTERN, RESIL (was FRUST), VIS_ENG', days: 3, closes: ['S12'],
+    files: [['modify', 'backend/services/dase_engine.py'], ['modify', 'backend/data/dase_profiles.json'], ['modify', 'backend/services/quiz_gen.py'], ['modify', 'backend/models/schemas.py']],
+    steps: ['PATTERN (autism): accuracy on items tagged sequence/category/matching in quiz_gen (add itemKind), only when ≥3 such items.', 'FRUST → RESIL = 1 − HES (hesitation index from P4-15) so “higher is better” matches its positive weight; keep a config alias for one release.', 'VIS_ENG: from P4-01 events (diagram dwell ≥ 3 s, card expansions, replays).', 'WRIT_EXP is replaced by KNOW and EXPR in P4-10.', 'Every parameter in _parameters gets formula text, unit, range and data source; the engine refuses to load a profile that weights an undefined parameter.'],
+    accept: 'Schema validator fails CI if a weighted parameter has no computation.' },
+
+  { id: 'P3-08', phase: 3, title: 'Server-derived scoring profile + teacher weight overrides with audit', days: 2, closes: ['S11'],
+    files: [['modify', 'backend/routers/evaluation.py'], ['create', 'backend/routers/overrides.py'], ['modify', 'backend/services/dase_engine.py']],
+    steps: ['/evaluate ignores body.profile; reads users/{uid}.profile.primary (fallback disabilities[0], else default).', 'PUT /api/teachers/students/{id}/dase-weights {weights, reason} (require_teacher_of): validates non-negative, known parameters; stored in dase_overrides/{studentId}; each evaluation records overrideId.', 'audit_log rows for every change; recommendation prompt mentions when an override is active.'],
+    accept: 'Changing body.profile has no effect; an override changes the next score and appears in audit_log.' },
+
+  { id: 'P3-09', phase: 3, title: 'Test suite + ablation + CI (restore the missing evidence)', days: 3, closes: ['S14'], snip: 'pytest',
+    files: [['create', 'backend/tests/test_dase_formulas.py'], ['create', 'backend/tests/test_classifier.py'], ['create', 'backend/tests/test_intent.py'], ['create', 'backend/tests/test_contract.py'], ['create', 'backend/scripts/run_ablation.py'], ['create', '.github/workflows/backend.yml']],
+    steps: ['Golden vectors for every parameter (hand-computed) and the composite; invariants: weights ≥ 0, score ∈ [0,1], coverage ∈ [0,1], monotonic in ACC when all else equal.', 'Classifier truth table over (ratio, focus, samples, re-read, timeout) incl. abstention paths.', 'Contract test: an event exactly as the frontend emits it (fixture generated from the TS types) validates and reaches the engine — would have caught S03.', 'run_ablation.py: 5 archetypes × 13 profiles, prints rank order; add an archetype for “uniformly failing” (would have exposed S08).', 'Delete or make real backend/data/math_items.json / passages.json.'],
+    accept: 'CI green; docs’ test claims match reality.' },
+
+  { id: 'P3-10', phase: 3, title: 'Weight hygiene, diagnostic-only audit and config versioning', days: 1, closes: ['S13'],
+    files: [['modify', 'backend/data/dase_profiles.json'], ['modify', 'backend/services/dase_engine.py'], ['modify', 'docs/PROJECT_EXPLANATION.md']],
+    steps: ['Normalise every profile to Σw = 1.', 'Apply the file’s own rule: TIME_EFF → diagnosticOnly under dyslexia; WRIT_EXP/EXPR → diagnosticOnly under dysgraphia (and justify or remove for deaf). Re-run ablation after each change.', 'Stamp configVersion + SHA-256 of dase_profiles.json into each evaluation; expose in dossier.'],
+    accept: 'Ablation rank order documented before/after; every evaluation is reproducible from (events, configSha256).' },
+
+  { id: 'P3-11', phase: 3, title: 'Exclude degraded quizzes; fix fallback quality and spaCy model', days: 1, closes: ['S17'],
+    files: [['modify', 'frontend/src/pages/QuizPage.tsx'], ['modify', 'backend/services/quiz_gen.py'], ['modify', 'backend/requirements.txt']],
+    steps: ['Propagate degraded onto QuestionEvent; engine drops degraded items from parameters (and reports the count).', 'Pin the en_core_web_sm wheel in requirements.txt (or run spacy download in the build command); generate a real False statement for true/false fallbacks or drop the type from fallback.'],
+    accept: 'Clean Render build produces fallback quizzes; degraded items never influence a score.' },
+
+  { id: 'P3-12', phase: 3, title: 'Error-breakdown endpoint accuracy and batching', days: 0.5, closes: ['S16'],
+    files: [['modify', 'backend/routers/evaluation.py']],
+    steps: ['Return the real number of sessions scanned; use a collection-group query on events filtered by studentId+type.'],
+    accept: 'sessionsScanned equals len(sessions); one query instead of N.' },
+
+  /* ═════════ PHASE 4 ═════════ */
+  { id: 'P4-01', phase: 4, title: 'Deaf: expose visual summary API and build VisualSummary (Mermaid + concept cards + text alternative)', days: 3, closes: ['D01', 'D05'],
+    files: [['create', 'backend/routers/visual.py'], ['modify', 'backend/app.py'], ['modify', 'backend/services/visual_generator.py'], ['create', 'frontend/src/components/VisualSummary.tsx'], ['modify', 'frontend/package.json']],
+    steps: ['POST /api/visual-summary (verify_user, per-user rate limit) → generate_visual_summary(text, profile).', 'Harden _sanitize_diagram: actually call _valid_node_id; reject lines containing click, href, callback, <, javascript:; render Mermaid with securityLevel:"strict".', 'Component: diagram (role="img", aria-label from concept titles), concept-card grid, and a <details> text outline so it is never the only representation.', 'Emit VIS_ENG events (dwell, card expansions, replay) per P3-07.'],
+    accept: 'A lesson produces a diagram + 3–6 cards; a malformed diagram degrades to cards only.' },
+
+  { id: 'P4-02', phase: 4, title: 'Deaf: real-time visual alert system (icon + text + flash-safe pulse + caption log)', days: 2, closes: ['D02', 'B11'],
+    files: [['create', 'frontend/src/components/VisualAlert.tsx'], ['modify', 'frontend/src/services/notify.ts'], ['modify', 'frontend/src/components/AccessibleNotification.tsx'], ['modify', 'frontend/src/index.css']],
+    steps: ['notify() gains channels: toast, border-pulse, badge; each event kind has a distinct icon + word (never colour alone).', 'Pulse is a 2-px viewport border animation ≤ 3 flashes/second and low luminance change (WCAG 2.3.1), disabled by reduceMotion.', 'Persistent “what was said/happened” caption log for TTS output, quiz feedback, timers, teacher messages.', 'Hook to speech.ts so every spoken message is also captioned when captionsAlways or profile is deaf/hard_of_hearing.'],
+    accept: 'With sound off, every state change that used to have audio is visible for ≥ 6 s and recoverable from the log.' },
+
+  { id: 'P4-03', phase: 4, title: 'Deaf: opt-in POS visual text reader (experimental, measured)', days: 2, closes: ['D03'],
+    files: [['create', 'backend/routers/nlp.py'], ['create', 'frontend/src/components/PosText.tsx']],
+    steps: ['POST /api/nlp/pos using the already-required spaCy pipeline (tokens + coarse POS).', 'Render tags with colour AND underline style/shape and a legend; toggle in Settings, default off.', 'Log toggle use and downstream COMP to test the hypothesis; label “experimental” in UI. Do not make this a patent pillar (docs/ROADMAP.md: no supporting evidence).'],
+    accept: 'Tag colours pass 3:1 contrast and remain distinguishable in greyscale.' },
+
+  { id: 'P4-04', phase: 4, title: 'Deaf: sign glossary (teacher-curated, licence-safe)', days: 2.5, closes: ['D04'],
+    files: [['create', 'backend/routers/glossary.py'], ['create', 'frontend/src/components/SignGloss.tsx'], ['create', 'frontend/src/pages/GlossaryManagerPage.tsx']],
+    steps: ['sign_glossary/{term, lang, videoUrl, captions, addedBy}; teachers upload school-owned clips to Firebase Storage.', 'Tap/long-press/Enter on a word opens a captioned, keyboard-operable popover; missing terms fall back to a definition.', 'Do not embed third-party sign videos until licences are verified.'],
+    accept: 'A term with a clip opens in ≤ 1 s and is fully keyboard/AT operable.' },
+
+  { id: 'P4-05', phase: 4, title: 'Content profiles for hard_of_hearing, low_vision, dysgraphia, motor', days: 1.5, closes: ['E12'],
+    files: [['modify', 'backend/services/nlp_simplify.py'], ['modify', 'backend/services/quiz_gen.py'], ['modify', 'backend/app.py']],
+    steps: ['PROFILES/FORMATS/PROFILE_MAX_SENTENCE/_CHAT_PROFILE_HINTS entries: hoh = deaf-lite (idioms out, sentences ≤ 14 words, no emoji); low_vision = structure announced, big-target items; dysgraphia = recognition over production; motor = single-select, no drag/time.'],
+    accept: 'Each profile has ablation-visible differences from default (readability and length deltas).' },
+
+  { id: 'P4-06', phase: 4, title: 'Dyscalculia: keyboard-operable math manipulatives', days: 4, closes: ['E01'],
+    files: [['create', 'frontend/src/components/math/NumberLine.tsx'], ['create', 'frontend/src/components/math/TenFrame.tsx'], ['create', 'frontend/src/components/math/FractionBar.tsx'], ['create', 'frontend/src/components/math/BaseTenBlocks.tsx'], ['create', 'frontend/src/components/math/ManipulativePanel.tsx']],
+    steps: ['Each is operable with arrow keys/buttons (no drag-only), announces state via aria-live (“Number line at 7; 3 more to 10”), and respects reduceMotion.', 'ManipulativePanel appears beside a math item when the profile is dyscalculia or the item has mathKind.'],
+    accept: 'Every manipulative completes its task without a pointer.' },
+
+  { id: 'P4-07', phase: 4, title: 'Dyscalculia: verified micro-step pipeline + conceptual/procedural error typing', days: 4, closes: ['E02'], snip: 'mathsteps',
+    files: [['create', 'backend/services/math_steps.py'], ['create', 'backend/routers/math.py'], ['modify', 'backend/services/dase_engine.py'], ['modify', 'backend/data/math_items.json']],
+    steps: ['LLM returns JSON steps {op, expr, result, say}; each is verified by a restricted AST/Fraction evaluator (never eval/sympify on model output). An unverifiable step is dropped and the item falls back to a template.', 'Error typing on wrong numeric answers: PLACE_VALUE, OPERATION_CONFUSION, CARRY_BORROW, FACT_RECALL, SEQUENCING (deterministic checks first, LLM only to explain).', 'Per-type counts become a dyscalculia-specific breakdown next to the four-cause chart.', 'Replace the one-item math_items.json with a real item bank carrying answer + distractor error types.'],
+    accept: '100 % of served steps re-verify; error typing agrees with a hand-labelled set.' },
+
+  { id: 'P4-08', phase: 4, title: 'Dyscalculia: multi-sensory math TTS (speak the step while animating the visual)', days: 2, closes: ['E03'],
+    files: [['modify', 'frontend/src/services/speech.ts'], ['create', 'frontend/src/components/math/StepPlayer.tsx']],
+    steps: ['speakMathStep(): number words plus place value (“twelve — one ten and two ones”); onboundary highlights the matching block/bead.', 'Pause/replay per step; replays counted as reRead.'],
+    accept: 'Highlight follows speech; works with reduceMotion (static emphasis).' },
+
+  { id: 'P4-09', phase: 4, title: 'Dysgraphia: voice-to-structured-essay pipeline', days: 3.5, closes: ['E04'],
+    files: [['create', 'backend/services/writing_structure.py'], ['create', 'backend/routers/writing.py'], ['create', 'frontend/src/components/VoiceEssay.tsx']],
+    steps: ['Continuous STT → live transcript (editable, punctuation via voice commands or LLM cleanup).', 'POST /api/writing/structure returns outline + paragraphs under a “no new facts, keep the student’s own words where possible” rule (same spirit as nlp_simplify.BASE_RULES); the UI shows original vs structured side by side for approval.', 'Store dictation, structured and final versions for the scoring step.'],
+    accept: 'Structured output contains no claim absent from the dictation (LLM-judge check + sampled human review).' },
+
+  { id: 'P4-10', phase: 4, title: 'Dysgraphia: separate knowledge (KNOW) and expression (EXPR) scoring', days: 3, closes: ['E05'], snip: 'knowexpr',
+    files: [['create', 'backend/services/writing_score.py'], ['modify', 'backend/services/quiz_gen.py'], ['modify', 'backend/data/dase_profiles.json'], ['modify', 'backend/services/dase_engine.py']],
+    steps: ['Add a short_answer item type with expected conceptIds.', 'KNOW = concepts evidenced ÷ concepts expected (each judged with a quoted evidence span; aggregation is deterministic, the LLM only labels).', 'EXPR = rubric on organisation/completeness/mechanics.', 'dysgraphia: KNOW scored, EXPR diagnosticOnly. default: both may be scored. Report both separately on the dashboard.'],
+    accept: 'Two responses with identical content but different spelling get equal KNOW and different EXPR.' },
+
+  { id: 'P4-11', phase: 4, title: 'Fair answer matching: fuzzy + phonetic; recognition-first for protected profiles', days: 1, closes: ['E06'],
+    files: [['create', 'frontend/src/utils/matchAnswer.ts'], ['modify', 'frontend/src/pages/QuizPage.tsx']],
+    steps: ['Normalise (case, punctuation, plural), accept edit-distance ≤ 1 (≤ 2 for words > 8 letters) and phonetic equality for dyslexia/dysgraphia; log matchType so DASE can see “accepted by fuzzy match”.'],
+    accept: 'photosynthesys / fotosynthesis accepted for photosynthesis; unrelated words rejected.' },
+
+  { id: 'P4-12', phase: 4, title: 'Anxiety & processing speed: calm mode, hidden scores, declared untimed mode', days: 2, closes: ['E07', 'E09'],
+    files: [['modify', 'frontend/src/types/profile.ts'], ['modify', 'frontend/src/pages/SettingsPage.tsx'], ['modify', 'frontend/src/index.css'], ['modify', 'frontend/src/pages/QuizPage.tsx']],
+    steps: ['Prefs: calmMode, untimed, hideScoresUntilEnd (additive to the data contract; document in DATA_CONTRACT changelog).', 'calmMode sets a data-calm attribute → tokens: neutral palette (no red for errors), larger spacing, zero motion, encouragement copy; results screen leads with strengths.', 'untimed guarantees no clocks and never emits timedOut; PROCESSING_DELAY derives from ratio only.'],
+    accept: 'With calmMode+untimed no red, no timer, no running score appear anywhere in the quiz.' },
+
+  { id: 'P4-13', phase: 4, title: 'Micro-assessment runner (3–4 question blocks, pause points, confidence-rebuild)', days: 2.5, closes: ['E08'],
+    files: [['create', 'frontend/src/components/quiz/MicroBlockRunner.tsx'], ['modify', 'frontend/src/pages/QuizPage.tsx'], ['modify', 'backend/routers/telemetry.py']],
+    steps: ['Blocks of 3–4 items with “Take a break / Continue / Stop here” between them; each block is its own session summary (completed=true) so stopping early is not an abandon.', 'Step-down: after two consecutive misses serve the next lower-difficulty item, then step up again (rebuild confidence) — logged as adaptation events.'],
+    accept: 'Stopping after block 1 is recorded as completed and scored on what was attempted.' },
+
+  { id: 'P4-14', phase: 4, title: 'Auto-pacing engine (personal reading speed & latency → delivery rate)', days: 3, closes: ['E10', 'S20'], snip: 'pacing',
+    files: [['create', 'backend/services/pacing.py'], ['create', 'frontend/src/hooks/useAutoPacing.ts'], ['modify', 'frontend/src/pages/LearningPage.tsx'], ['modify', 'backend/routers/telemetry.py']],
+    steps: ['Emit ReadingEvents (wordsRead, elapsedMs, replays, pauseCount) from the reader — currently none exist.', 'Update a per-student pacing record with an exponential moving average, clamp to a safe range and slow after high replay rates; apply to TTS rate, highlight speed and chunk size.', 'Never speed up automatically for profiles where slower is expected; present suggestions (“Shall I read slower?”) rather than silently changing.', 'Constants (0.7/0.3, 0.9, 80–300 wpm) are unvalidated assumptions — name them as such and tune in the pilot.'],
+    accept: 'A student who replays often gets a lower default rate next session; teacher can see and override.' },
+
+  { id: 'P4-15', phase: 4, title: 'Hesitation index from interaction patterns (no facial inference) + gentle interventions', days: 2.5, closes: ['E11'], snip: 'hesitation',
+    files: [['create', 'backend/services/hesitation.py'], ['modify', 'backend/services/dase_engine.py'], ['modify', 'frontend/src/components/Eye.tsx'], ['create', 'frontend/src/hooks/useIntervention.ts']],
+    steps: ['HES combines pre-answer latency vs personal baseline, answer changes, tab-blur count and mean chatbot frustration_score (persist chatbot sentiment per session).', 'RESIL = 1 − HES feeds DASE (P3-07). Interventions (offer a break, switch to micro-blocks, enable calm mode) are suggestions the student can decline.', 'Name it “hesitation”, never “anxiety”: docs/ROADMAP.md correctly rejects inferring a clinical state from face landmarks.'],
+    accept: 'High-hesitation session offers a break once, not repeatedly; nothing labelled as a diagnosis appears anywhere.' },
+
+  /* ═════════ PHASE 5 ═════════ */
+  { id: 'P5-01', phase: 5, title: 'Teacher dashboard on the scoped API only; show coverage with every score', days: 2, closes: ['T04', 'T05'],
+    files: [['modify', 'frontend/src/pages/TeacherDashboardPage.tsx'], ['create', 'frontend/src/components/teacher/RosterTable.tsx']],
+    steps: ['Use /api/analytics/roster + /api/analytics/class + /api/analytics/student/{id}; drop the per-student legacy calls.', 'Show “72 % · coverage 65 %” (+ tooltip listing missingParameters) and the words “face-presence, not attention”.', 'Filter by primary disability; sortable, keyboard-accessible table with scope=col headers.'],
+    accept: 'Dashboard makes exactly 3 requests on load; no score without coverage.' },
+
+  { id: 'P5-02', phase: 5, title: 'DASE radar chart (diagnostic-only shown distinctly) with data-table twin', days: 2, closes: ['T01', 'T06'], snip: 'radar',
+    files: [['create', 'frontend/src/components/teacher/DaseRadar.tsx']],
+    steps: ['One axis per computed parameter; unmeasured parameters are omitted, not drawn at 0.', 'diagnosticOnly axes dashed with “reported, not scored”; optional reference polygon = median of same-primary-profile students (only if n ≥ 5; never used for scoring — the engine deliberately avoids cohort baselines).', 'Equivalent <table> and an aria-label summary (“Strongest: EFFORT 0.78; lowest: CONSIST 0.31”).'],
+    accept: 'Screen-reader user gets the same information as the chart.' },
+
+  { id: 'P5-03', phase: 5, title: 'Error-classification donut + per-session trend with confidence', days: 2, closes: ['T02', 'T06'],
+    files: [['create', 'frontend/src/components/teacher/ErrorCausePie.tsx'], ['modify', 'backend/routers/analytics.py']],
+    steps: ['Donut of the four causes plus an explicit “unclassified” slice; patterned fills (not colour alone).', 'Stacked bars by session and mean confidence per cause from error_breakdown.meanConfidence.', 'Copy that reflects the classifier’s ambiguity (alternatives) rather than presenting labels as certain.'],
+    accept: 'Numbers match the stored evaluation; unclassified slice reveals telemetry gaps.' },
+
+  { id: 'P5-04', phase: 5, title: 'Repair or remove the legacy focus/frustration panels', days: 1.5, closes: ['T03'],
+    files: [['modify', 'backend/app.py'], ['modify', 'frontend/src/pages/TeacherDashboardPage.tsx'], ['modify', 'backend/routers/telemetry.py']],
+    steps: ['Derive focus from sessions.summary.meanFocusRatio (now real after P3-02); persist chatbot frustration per session (P4-15). Delete /analytics/log-session/ and telemetry_sessions when unused.'],
+    accept: 'Avg Focus and Frustration Alert render from real data or are gone.' },
+
+  { id: 'P5-05', phase: 5, title: 'Accessible chart pattern used by every chart', days: 1, closes: ['T06'],
+    files: [['modify', 'frontend/src/components/Charts.tsx'], ['create', 'frontend/src/components/teacher/ChartFrame.tsx']],
+    steps: ['ChartFrame renders title, role="img" + summary, toggle “View as table”, and print-safe patterns.'],
+    accept: 'axe clean; every chart has a table alternative.' },
+
+  { id: 'P5-06', phase: 5, title: 'Weight-override UI and audit-log viewer', days: 2, closes: ['T09'],
+    files: [['create', 'frontend/src/components/teacher/WeightOverride.tsx'], ['create', 'frontend/src/pages/AuditLogPage.tsx']],
+    steps: ['Sliders with live renormalised preview and coverage impact; mandatory reason; history list.'],
+    accept: 'Override is visible in the student’s evaluation and the audit viewer.' },
+
+  { id: 'P5-07', phase: 5, title: 'Evidence hygiene NOW: commit staged work, tag, reconcile docs with reality', days: 1, closes: ['T08'],
+    files: [['modify', 'docs/PHASE_LEARNINGS.md'], ['modify', 'docs/ROADMAP.md'], ['create', 'docs/EVIDENCE_LOG.md']],
+    steps: ['Commit the staged DASE/telemetry/router/voice-intent work in logical, dated commits (one per novelty) and tag e.g. v2.0-rtp-1. Today it exists only in the index.', 'Mark every documented-but-unbuilt item as “planned” (VoiceNavigator, VisualSummary, ablation, test_phase*). Do not leave “Complete” next to missing files.', 'Record who conceived what and when (inventorship notes), keep lab notebooks/screenshots/demo recordings dated.'],
+    accept: 'git log shows dated commits for each novelty; every file named in docs exists.' },
+
+  { id: 'P5-08', phase: 5, title: 'Automated claim-support dossier generator', days: 3, closes: ['T07'], snip: 'dossier',
+    files: [['create', 'backend/scripts/build_dossier.py'], ['create', 'backend/routers/dossier.py'], ['create', 'docs/claims/claim_map.yaml']],
+    steps: ['claim_map.yaml (human-authored, attorney-reviewed) maps each claim element → code symbol → test id → sample-output key.', 'The script resolves every mapping (fails if a symbol/test is missing), extracts formulas + weight tables from dase_profiles.json with SHA-256, embeds the latest ablation output and aggregate evaluation stats (coverage distribution, error-cause mix — anonymised).', 'An LLM may draft prose only from this structured evidence, and a post-check rejects any sentence that cites no evidence id. Output: patent_dossier.md/.json + a “not yet reduced to practice” list generated from unresolved mappings.', 'GET /api/admin/dossier (admin only) serves the latest build.'],
+    accept: 'Dossier build fails while any claimed feature lacks code+test evidence.' },
+
+  { id: 'P5-09', phase: 5, title: 'Pre-filing checklist (with a registered patent attorney)', days: 1, closes: ['T07', 'T08'],
+    files: [['create', 'docs/PRE_FILING_CHECKLIST.md']],
+    steps: ['Public-disclosure audit: repo visibility, the hosted Vercel site, docs, demos, talks. Many jurisdictions have no or a limited grace period — find out before publishing more.', 'Prior-art search log, including: response-time-effort / rapid-guessing detection in computer-based testing, IRT / cognitive-diagnosis models, gaze/attention analytics in e-learning, WCAG-oriented voice UIs. The research doc’s “no system does X” statements are assertions to be tested, not facts.', 'Claim strategy discussion: system + method + storage-medium claims tied to the sensor-to-adaptation technical effect (software/maths-per-se exclusions such as US §101 and India §3(k) make pure-formula claims risky); dependent claims per profile; decide on provisional filing.', 'Consent/ethics record (DPDP/GDPR/COPPA as applicable), especially for children’s webcam and voice data.'],
+    accept: 'Attorney-signed go/no-go and a dated disclosure inventory.' },
+];
+
+/* ───────────── CODE SNIPPETS (rendered with textContent — safe) ───────────── */
+const SNIPPETS = {
+rules: { title: 'firestore.rules — clients can never write role / teacherId / status', lang: 'firestore rules', code: String.raw`rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function myDoc()    { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
+    function isAdmin()  { return signedIn() && myDoc().role == 'admin'; }
+
+    match /users/{uid} {
+      allow read: if signedIn() && (
+        request.auth.uid == uid ||
+        resource.data.teacherId == request.auth.uid ||   // primary teacher; co-teachers go through the API
+        isAdmin());
+
+      // Owners may change ONLY these top-level fields.
+      allow update: if signedIn() && request.auth.uid == uid &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['profile', 'displayName', 'consent']);
+
+      allow create, delete: if false;          // Admin SDK only (bypasses rules)
+    }
+
+    // Everything else is reached through the FastAPI backend.
+    match /{document=**} { allow read, write: if false; }
+  }
+}` },
+
+schema: { title: 'Firestore schema v2 — users, enrollments, audit_log, baselines, overrides', lang: 'jsonc', code: String.raw`// users/{uid}
+{
+  "role": "student",                          // "student" | "teacher" | "admin"
+  "email": "amara.k@students.school.example", // synthetic login id for children without email
+  "username": "amara.k",
+  "displayName": "Amara K.",
+  "status": "pending_first_login",            // pending_first_login | active | disabled
+  "mustChangePassword": true,
+  "teacherId": "<uid of teacher>",            // primary teacher; validated on write (role == teacher, not disabled)
+  "gradeLevel": "4",
+  "createdBy": "<uid of admin>",
+  "createdAt": "<serverTimestamp>",
+  "passwordChangedAt": null,
+  "lastLoginAt": null,
+  "profile": {                                 // existing shape, extended additively (DATA_CONTRACT v1 allows optional fields)
+    "disabilities": ["dyslexia"], "primary": "dyslexia", "severity": "moderate",
+    "prefs": { "...existing Prefs...": "",
+               "voiceFirst": false, "voiceEngine": "app",      // "app" | "screenReader"
+               "calmMode": false, "untimed": false, "hideScoresUntilEnd": false,
+               "microAssessment": 0, "autoPacing": true }
+  },
+  "consent": { "dataCollection": true, "webcam": false, "cloudSpeech": true, "version": 2, "grantedAt": "<ts>" }
+}
+
+// enrollments/{teacherId}_{studentId}         — many-to-many (co-teachers / subject teachers); powers require_teacher_of()
+{ "teacherId": "...", "studentId": "...", "classId": null, "active": true, "since": "<ts>", "endedAt": null, "createdBy": "<admin uid>" }
+
+// audit_log/{autoId}                          — every admin/teacher mutation
+{ "actor": "<uid>", "action": "student.reassign", "target": "<student uid>",
+  "before": { "teacherId": "A" }, "after": { "teacherId": "B" }, "reason": "class change", "at": "<ts>" }
+
+// student_baselines/{studentId}               — feeds TIME_EFF and the pacing engine (cross-session, personal)
+{ "medianMsByBand": { "1": 5200, "3": 7400 }, "nSamples": 64, "wpmEma": 148, "updatedAt": "<ts>" }
+
+// dase_overrides/{studentId}                  — teacher weight override, always with a reason
+{ "weights": { "ACC": 0.10, "COMP": 0.30 }, "reason": "…", "by": "<teacher uid>", "at": "<ts>" }` },
+
+provision: { title: 'backend/routers/admin.py — provisioning with generated temporary credential', lang: 'python', code: String.raw`import secrets
+from typing import Literal, Optional
+
+from fastapi import APIRouter, Depends, HTTPException
+from firebase_admin import auth as fb_auth, firestore
+from pydantic import BaseModel, Field
+
+from auth import verify_role
+from config import SCHOOL_LOGIN_DOMAIN
+from firebase_config import db
+
+router = APIRouter(prefix="/api/admin")
+
+_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"   # no 0/O, 1/l/I: safe to read aloud
+
+
+def _temp_password() -> str:
+    raw = "".join(secrets.choice(_ALPHABET) for _ in range(12))
+    return "-".join(raw[i:i + 4] for i in range(0, 12, 4))              # XXXX-XXXX-XXXX
+
+
+class NewUser(BaseModel):
+    role: Literal["student", "teacher"]
+    display_name: str = Field(min_length=1, max_length=80)
+    username: str = Field(pattern=r"^[a-z0-9._-]{3,32}$")
+    grade_level: Optional[str] = None
+    teacher_id: Optional[str] = None      # REQUIRED for students (validated below)
+    email: Optional[str] = None           # optional; otherwise username@SCHOOL_LOGIN_DOMAIN
+
+
+@router.post("/users")
+async def create_user(body: NewUser, admin: dict = Depends(verify_role("admin"))):
+    if body.role == "student":
+        t = db.collection("users").document(body.teacher_id or "-").get()
+        if not t.exists or t.to_dict().get("role") != "teacher" or t.to_dict().get("status") == "disabled":
+            raise HTTPException(422, "A student must be assigned to an active teacher")
+
+    login = body.email or f"{body.username}@{SCHOOL_LOGIN_DOMAIN}"
+    temp = _temp_password()
+    try:
+        rec = fb_auth.create_user(email=login, password=temp, display_name=body.display_name)
+    except fb_auth.EmailAlreadyExistsError:
+        raise HTTPException(409, "That username/email is already taken")
+
+    now = firestore.SERVER_TIMESTAMP
+    batch = db.batch()
+    batch.set(db.collection("users").document(rec.uid), {
+        "role": body.role, "email": login, "username": body.username, "displayName": body.display_name,
+        "status": "pending_first_login", "mustChangePassword": True,
+        "teacherId": body.teacher_id, "gradeLevel": body.grade_level,
+        "createdBy": admin["uid"], "createdAt": now,
+    })
+    if body.role == "student":
+        batch.set(db.collection("enrollments").document(f"{body.teacher_id}_{rec.uid}"),
+                  {"teacherId": body.teacher_id, "studentId": rec.uid, "active": True, "since": now, "createdBy": admin["uid"]})
+    batch.set(db.collection("audit_log").document(),
+              {"actor": admin["uid"], "action": f"{body.role}.create", "target": rec.uid, "at": now})
+    batch.commit()
+
+    # Returned ONCE for the hand-off sheet; never stored in plaintext.
+    return {"uid": rec.uid, "loginId": login, "temporaryPassword": temp,
+            "note": "Must be changed at first sign-in."}` },
+
+deps: { title: 'backend/auth.py — active-user gate, teacher scoping, session ownership', lang: 'python', code: String.raw`from cachetools import TTLCache
+from fastapi import Depends, HTTPException, Request
+from starlette.concurrency import run_in_threadpool
+
+_acct = TTLCache(maxsize=2048, ttl=15)      # invalidate on admin actions: _acct.pop(uid, None)
+
+
+def _account(uid: str) -> dict:
+    if uid not in _acct:
+        snap = db.collection("users").document(uid).get()
+        if not snap.exists:
+            raise HTTPException(403, {"code": "PROFILE_MISSING"})   # no auto-provisioning
+        _acct[uid] = snap.to_dict()
+    return _acct[uid]
+
+
+async def require_active_user(request: Request, user: dict = Depends(verify_user)) -> dict:
+    acct = await run_in_threadpool(_account, user["uid"])
+    if acct.get("status") == "disabled":
+        raise HTTPException(403, {"code": "ACCOUNT_DISABLED"})
+    if acct.get("mustChangePassword") and request.url.path != "/api/auth/first-login-password":
+        raise HTTPException(403, {"code": "PASSWORD_CHANGE_REQUIRED"})
+    return {**user, "role": acct.get("role"), "acct": acct}
+
+
+def can_access_student(user: dict, student_id: str) -> bool:
+    if user["uid"] == student_id or user["role"] == "admin":
+        return True
+    if user["role"] != "teacher":
+        return False
+    enr = db.collection("enrollments").document(f"{user['uid']}_{student_id}").get()
+    return enr.exists and bool(enr.to_dict().get("active"))
+
+
+def require_teacher_of(student_id: str, user: dict = Depends(require_active_user)) -> dict:
+    """Use as Depends(require_teacher_of) on any route with a {student_id} path parameter."""
+    if not can_access_student(user, student_id):
+        raise HTTPException(404, "Student not found")   # 404, not 403: don't confirm the id exists
+    return user
+
+
+def assert_session_access(session_id: str, user: dict, *, write: bool = False) -> dict:
+    snap = db.collection("sessions").document(session_id).get()
+    if not snap.exists:
+        raise HTTPException(404, "Session not found")
+    s = snap.to_dict()
+    if write and s["studentId"] != user["uid"]:          # only the owner may add events / end the session
+        raise HTTPException(403, "Not your session")
+    if not can_access_student(user, s["studentId"]):
+        raise HTTPException(404, "Session not found")
+    return s` },
+
+firstlogin: { title: 'backend/routers/auth_flow.py — server-enforced first-login password change', lang: 'python', code: String.raw`from fastapi import APIRouter, Depends, HTTPException
+from firebase_admin import auth as fb_auth, firestore
+from pydantic import BaseModel, Field
+
+from auth import _acct, require_active_user
+from firebase_config import db
+
+router = APIRouter(prefix="/api/auth")
+
+_COMMON = {"password123", "1234567890", "qwertyuiop", "letmein123"}   # extend / use a real deny-list
+
+
+class NewPassword(BaseModel):
+    newPassword: str = Field(min_length=10, max_length=128)
+
+
+@router.post("/first-login-password")
+async def first_login_password(body: NewPassword, user: dict = Depends(require_active_user)):
+    if not user["acct"].get("mustChangePassword"):
+        raise HTTPException(409, "Password change not required")
+    if body.newPassword.lower() in _COMMON:
+        raise HTTPException(422, "Choose a less guessable password")
+
+    fb_auth.update_user(user["uid"], password=body.newPassword)        # done server-side: the client cannot skip it
+    db.collection("users").document(user["uid"]).update({
+        "mustChangePassword": False, "status": "active",
+        "passwordChangedAt": firestore.SERVER_TIMESTAMP,
+    })
+    fb_auth.revoke_refresh_tokens(user["uid"])                         # old sessions end
+    _acct.pop(user["uid"], None)
+    return {"status": "ok", "next": "sign_in_again"}` },
+
+firstloginFe: { title: 'frontend — FirstLoginPage + 403 interceptor', lang: 'tsx', code: String.raw`// services/api.ts (addition)
+api.interceptors.response.use(undefined, (err) => {
+  const code = err?.response?.data?.detail?.code;
+  if (code === 'PASSWORD_CHANGE_REQUIRED') window.location.assign('/first-login');
+  if (code === 'ACCOUNT_DISABLED') { void signOut(auth); window.location.assign('/login'); }
+  return Promise.reject(err);
+});
+
+// pages/FirstLoginPage.tsx
+export default function FirstLoginPage() {
+  const [pw, setPw] = useState('');
+  const [pw2, setPw2] = useState('');
+  const [msg, setMsg] = useState('');
+  const navigate = useNavigate();
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (pw.length < 10 || pw !== pw2) { setMsg('Passwords must match and be at least 10 characters.'); return; }
+    try {
+      await api.post('/api/auth/first-login-password', { newPassword: pw });
+      await signOut(auth);
+      notify('Password changed. Please sign in with your new password.', { kind: 'success' });
+      navigate('/login');
+    } catch (err: any) {
+      setMsg(err?.response?.data?.detail ?? 'Could not change the password. Please try again.');
+    }
+  }
+
+  return (
+    <section aria-labelledby="fl-title" className="max-w-md mx-auto">
+      <h1 id="fl-title">Choose your own password</h1>
+      <p id="pw-help">Use at least 10 characters. A few random words is easy to remember and hard to guess.</p>
+      <form onSubmit={submit} noValidate>
+        <label htmlFor="pw">New password</label>
+        <input id="pw" type="password" autoComplete="new-password" aria-describedby="pw-help"
+               value={pw} onChange={(e) => setPw(e.target.value)} />
+        <label htmlFor="pw2">Type it again</label>
+        <input id="pw2" type="password" autoComplete="new-password"
+               value={pw2} onChange={(e) => setPw2(e.target.value)} />
+        <button type="submit">Save password</button>
+        <div role="alert">{msg}</div>
+      </form>
+    </section>
+  );
+}` },
+
+speech: { title: 'frontend/src/services/speech.ts — unlock, earcons, sentence-level TTS, one-shot STT', lang: 'typescript', code: String.raw`let ctx: AudioContext | null = null;
+
+/** Call inside a user-gesture handler (keydown / pointerdown). Browsers block audio until then. */
+export function unlockAudio(): void {
+  const AC = window.AudioContext || (window as any).webkitAudioContext;
+  ctx = ctx ?? new AC();
+  void ctx.resume();
+}
+
+function tone(freq: number, dur = 0.12, type: OscillatorType = 'sine', at = 0, vol = 0.12) {
+  if (!ctx) return;
+  const t = ctx.currentTime + at;
+  const o = ctx.createOscillator();
+  const g = ctx.createGain();
+  o.type = type; o.frequency.value = freq;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(vol, t + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g); g.connect(ctx.destination);
+  o.start(t); o.stop(t + dur + 0.02);
+}
+
+/** Short, quiet, additive to speech — never a replacement for it. */
+export const earcon = {
+  heading:       () => { tone(523, 0.10, 'triangle'); tone(784, 0.14, 'triangle', 0.11); },   // rising two-tone
+  content:       () => tone(392, 0.05, 'sine', 0, 0.06),                                      // soft tick
+  question:      () => { tone(440, 0.09, 'square', 0, 0.05); tone(554, 0.09, 'square', 0.10, 0.05); tone(659, 0.12, 'square', 0.20, 0.05); },
+  micOpen:       () => { tone(440, 0.08); tone(660, 0.10, 'sine', 0.09); },                   // rising
+  notUnderstood: () => { tone(660, 0.08); tone(330, 0.14, 'sine', 0.09); },                   // falling
+};
+
+export interface SpeakOpts {
+  rate?: number; lang?: string;
+  onSentence?: (i: number) => void;
+  onWord?: (sentence: number, charIndex: number) => void;   // drives the highlight
+  onDone?: () => void;
+}
+let token = 0;
+
+/** One utterance per sentence: avoids the per-word queue flood and Chrome's long-utterance cut-off. Returns a stop() fn. */
+export function speakSentences(sentences: string[], o: SpeakOpts = {}): () => void {
+  speechSynthesis.cancel();
+  const mine = ++token;
+  let i = 0;
+  const next = () => {
+    if (mine !== token) return;
+    if (i >= sentences.length) { o.onDone?.(); return; }
+    o.onSentence?.(i);
+    const u = new SpeechSynthesisUtterance(sentences[i]);
+    u.rate = o.rate ?? 1;
+    u.lang = o.lang ?? (document.documentElement.lang || 'en-US');
+    u.onboundary = (e) => { if (e.name === 'word') o.onWord?.(i, e.charIndex); };
+    u.onend = u.onerror = () => { i += 1; next(); };
+    speechSynthesis.speak(u);
+  };
+  next();
+  return () => { token += 1; speechSynthesis.cancel(); };    // STOP / Escape always wins
+}
+
+export function listenOnce(lang = document.documentElement.lang || 'en-US') {
+  const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+  if (!SR) return Promise.reject(new Error('unsupported'));      // keyboard-only fallback
+  return new Promise<{ transcript: string; confidence: number }>((resolve, reject) => {
+    const r = new SR();
+    r.lang = lang; r.interimResults = false; r.maxAlternatives = 1;
+    r.onresult  = (e: any) => resolve({ transcript: e.results[0][0].transcript, confidence: e.results[0][0].confidence || 0 });
+    r.onerror   = (e: any) => reject(new Error(e.error));
+    r.onnomatch = () => reject(new Error('nomatch'));
+    earcon.micOpen();
+    r.start();
+  });
+}` },
+
+bootstrap: { title: 'VoiceBootstrap.tsx — instant announcement for screen readers, audio on first gesture', lang: 'tsx', code: String.raw`const KEY = 'eduease.voiceFirst';
+const read  = () => { try { return localStorage.getItem(KEY) === '1'; } catch { return false; } };
+const write = (v: boolean) => { try { localStorage.setItem(KEY, v ? '1' : '0'); } catch { /* private mode */ } };
+
+const WELCOME: Record<string, string[]> = {
+  default: ['Welcome to EduEase.', 'Say or press H at any time for help.'],
+  '/login': ['Welcome to EduEase.', 'You are on the sign in page.',
+             'Enter your username and password. Press H for help.'],
+};
+
+export default function VoiceBootstrap() {
+  const { pathname } = useLocation();
+  const [armed, setArmed] = useState(read);       // device remembers voice-first
+  const [announce, setAnnounce] = useState('');
+
+  const start = useCallback(() => {
+    unlockAudio();                                  // inside the gesture => allowed
+    earcon.heading();
+    speakSentences(WELCOME[pathname] ?? WELCOME.default);
+    setArmed(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    // A screen reader reads this immediately — no gesture needed.
+    setAnnounce(armed ? 'EduEase voice mode is on. Press any key to hear this page.'
+                      : 'Press V for voice-first mode.');
+    if (!armed) return;
+    // Any key (including Tab) or pointer counts as user activation.
+    window.addEventListener('keydown', start, { once: true });
+    window.addEventListener('pointerdown', start, { once: true });
+    return () => { window.removeEventListener('keydown', start); window.removeEventListener('pointerdown', start); };
+  }, [armed, start]);
+
+  useEffect(() => {
+    if (armed) return;
+    const onV = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement;
+      if (e.key.toLowerCase() === 'v' && !/input|textarea|select/i.test(t.tagName)) { write(true); setArmed(true); }
+    };
+    window.addEventListener('keydown', onV);
+    return () => window.removeEventListener('keydown', onV);
+  }, [armed]);
+
+  return (
+    <>
+      <div role="status" aria-live="polite" className="sr-only">{announce}</div>
+      {armed && (
+        <button autoFocus onClick={start}
+                className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[300] focus:bg-primary focus:text-on-primary focus:px-4 focus:py-2 focus:rounded-lg">
+          Voice mode is on. Press any key to hear this page.
+        </button>
+      )}
+    </>
+  );
+}
+// Do NOT try to detect assistive technology (unreliable and a privacy problem). Let the user opt in and remember it.` },
+
+announcer: { title: 'Skip link + RouteAnnouncer (title, focus, one announcement)', lang: 'tsx', code: String.raw`// Layout.tsx — first element inside the root wrapper, on EVERY page (auth pages too)
+<a href="#main-content"
+   className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[200] focus:bg-primary focus:text-on-primary focus:px-4 focus:py-2 focus:rounded-lg">
+  Skip to main content
+</a>
+<nav aria-label="Primary">…</nav>
+<main id="main-content" tabIndex={-1}>{children}</main>
+
+// components/RouteAnnouncer.tsx — mount once, after <Routes>
+export default function RouteAnnouncer() {
+  const { pathname } = useLocation();
+  const { profile } = useProfile();
+  const [msg, setMsg] = useState('');
+
+  useEffect(() => {
+    const h1 = document.querySelector<HTMLElement>('main h1');
+    const title = h1?.innerText ?? pathname;
+    document.title = title + ' – EduEase';                       // WCAG 2.4.2
+    h1?.setAttribute('tabindex', '-1');
+    h1?.focus({ preventScroll: true });                          // WCAG 2.4.3 — focus follows the navigation
+    // Announce through the live region ONLY when focus won't already be read, to avoid double speech.
+    setMsg(profile.prefs.voiceEngine === 'app' ? '' : title + '. ' + (PAGE_SUMMARY[pathname] ?? ''));
+    if (profile.prefs.voiceFirst) earcon.heading();
+  }, [pathname]);
+
+  return <div role="status" aria-live="polite" className="sr-only">{msg}</div>;
+}
+// Always keep the live container mounted (see AccessibleNotification.tsx:46 — it returns null when empty).` },
+
+voicenav: { title: 'VoiceNavigator.tsx — core loop (rules first, LLM only on a miss, read-back, telemetry)', lang: 'typescript', code: String.raw`async function handleUtterance(text: string, sttConfidence: number) {
+  const t0 = performance.now();
+  let intent = matchRules(text);                                   // voiceIntents.ts mirrors backend/services/intent.py
+  let source: 'rules' | 'llm' | 'none' = intent ? 'rules' : 'none';
+
+  if (!intent) {
+    try {
+      const { data } = await api.post('/api/voice/intent', { text, allowLlm: true, context: currentRoute() });
+      intent = data; source = data.source;
+    } catch {
+      intent = { intent: 'UNKNOWN', slots: {}, confidence: 0 };
+    }
+  }
+
+  if (intent.intent === 'STOP') stopSpeaking();                    // must be honoured immediately
+  const understood = intent.intent !== 'UNKNOWN';
+
+  if (!understood) {
+    earcon.notUnderstood();
+    speakSentences(['Sorry, I did not catch that. Say help to hear what I can do.']);
+  } else {
+    await dispatch(intent);                                        // navigate | publish to useVoiceCommand | read back "Selected B. … Say submit."
+  }
+
+  track({                                                          // VoiceEvent -> the ACTIVE learning session
+    type: 'voice', sessionId, studentId: uid, ts: Date.now(),
+    transcript: text, sttConfidence,
+    intent: intent.intent, intentSource: source, intentConfidence: intent.confidence,
+    understood, repeats: repeatCounter.bump(text),
+    actionMs: Math.round(performance.now() - t0),
+    route: intent.slots?.path ?? null,
+  });
+}
+// VOICE_Q and NAV_EFF measure THE INTERFACE, not the learner — keep that wording everywhere they surface.` },
+
+qtelemetry: { title: 'hooks/useQuestionTelemetry.ts — measure, don’t hard-code', lang: 'typescript', code: String.raw`export function useQuestionTelemetry(questionId: string) {
+  const t0 = useRef(performance.now());
+  const first = useRef<number | null>(null);
+  const changes = useRef(0);
+  const replays = useRef(0);
+  const revisits = useRef(0);
+  const last = useRef<string | null>(null);
+
+  useEffect(() => {                                   // new question -> reset
+    t0.current = performance.now(); first.current = null;
+    changes.current = 0; replays.current = 0; revisits.current = 0; last.current = null;
+  }, [questionId]);
+
+  return {
+    onInteract:       () => { if (first.current === null) first.current = performance.now() - t0.current; },
+    onSelect:         (v: string) => { if (last.current !== null && last.current !== v) changes.current += 1; last.current = v; },
+    onReplayQuestion: () => { replays.current += 1; },     // TTS replay or voice "repeat"
+    onStemRefocus:    () => { revisits.current += 1; },    // returned to the stem after touching options
+    snapshot: () => ({
+      timeMs: Math.round(performance.now() - t0.current),
+      timeToFirstInteractionMs: first.current === null ? null : Math.round(first.current),
+      answerChanges: changes.current,
+      reRead: replays.current > 0,
+      revisits: revisits.current,
+    }),
+  };
+}` },
+
+focus: { title: 'Real focus samples: Eye.onSample + FocusMeter that counts ticks, not transitions', lang: 'typescript', code: String.raw`// Eye.tsx — inside the existing 500 ms interval, AFTER computing onScreen
+onSampleRef.current?.(onScreen, now);          // raw sample every tick (not the 4 s-debounced UI state)
+
+// services/telemetry.ts
+const MIN_SAMPLES = 5;                         // == backend MIN_FOCUS_SAMPLES
+export class FocusMeter {
+  private on = 0;
+  private total = 0;
+  sample(focused: boolean): void { this.total += 1; if (focused) this.on += 1; }
+  read(): { focusRatio: number | null; focusSamples: number } {
+    return this.total < MIN_SAMPLES
+      ? { focusRatio: null, focusSamples: this.total }
+      : { focusRatio: +(this.on / this.total).toFixed(3), focusSamples: this.total };
+  }
+  reset(): void { this.on = 0; this.total = 0; }        // call at the start of each question
+}
+// Name it "face-presence / looking-at-screen" in code, API and UI — never "attention".` },
+
+closedloop: { title: 'QuizPage — classify wrong answers and run the closed loop', lang: 'typescript', code: String.raw`const sig = qt.snapshot();                                      // useQuestionTelemetry
+const { focusRatio, focusSamples } = focusMeter.read();
+let classification = null;
+let represent = false;
+
+if (!isCorrect) {
+  const { data } = await api.post('/api/classify', {
+    timeMs: sig.timeMs, priorTimesMs: priorTimes.current,
+    focusRatio, focusSamples,
+    answerChanges: sig.answerChanges, timeToFirstInteractionMs: sig.timeToFirstInteractionMs,
+    reRead: sig.reRead, timedOut: false,
+    hasSimplerVariant: !!q.simplerQuestion,
+  });
+  classification = data.classification;
+  represent = data.shouldRepresent;                              // COMPREHENSION_BARRIER && confidence >= 0.45
+}
+
+track({ type: 'question', ...base, ...sig, focusRatio, focusSamples, classification, degraded });
+priorTimes.current.push(sig.timeMs);
+
+if (represent) showSimplerVariant(q);   // isRepresentation:true, originalQuestionId:q.questionId, attempts:2` },
+
+closedloopSchema: { title: 'backend/models/schemas.py — Pydantic currently DROPS unknown fields like classification', lang: 'python', code: String.raw`class Classification(BaseModel):
+    label: Literal["KNOWLEDGE_GAP", "ATTENTION_LAPSE", "PROCESSING_DELAY", "COMPREHENSION_BARRIER"]
+    confidence: float = Field(ge=0, le=1)
+    alternatives: List[str] = Field(default_factory=list)
+    signals: dict = Field(default_factory=dict)
+
+
+class QuestionEvent(EventBase):
+    ...                                         # existing fields
+    classification: Optional[Classification] = None      # additive, optional => contract-safe
+    classifierVersion: Optional[str] = None
+    degraded: bool = False                               # spaCy-fallback item: excluded from DASE` },
+
+formulas: { title: 'dase_engine.py — corrected ADJ_ACC, CONSIST, TIME_EFF, TASK_COMP', lang: 'python', code: String.raw`def _adj_acc(answered, credit=0.75):
+    wrong = [e for e in answered if not e.get("correct")]
+    classified = [e for e in wrong if (e.get("classification") or {}).get("label")]
+    if wrong and len(classified) / len(wrong) < 0.8:
+        return None                       # classifier coverage too thin to claim an adjusted score
+    total = 0.0
+    for e in answered:                    # zero wrong answers => ADJ_ACC == ACC (was: parameter vanished)
+        if e.get("correct"):
+            total += 1.0
+        else:
+            c = e.get("classification") or {}
+            if c.get("label") == ATTENTION_LAPSE:
+                total += credit * float(c.get("confidence", 0.0))
+    return total / len(answered)
+
+
+def _consist(correct_times_ms, per_session_acc):
+    """Pace stability + cross-session stability. Independent of accuracy level."""
+    parts = []
+    if len(correct_times_ms) >= 4:
+        m = statistics.fmean(correct_times_ms)
+        cv = statistics.pstdev(correct_times_ms) / m if m else 1.0
+        parts.append(1.0 - min(cv, 1.0))
+    if len(per_session_acc) >= 3:
+        parts.append(1.0 - min(statistics.pstdev(per_session_acc) / 0.5, 1.0))   # pstdev of [0,1] values <= 0.5
+    return statistics.fmean(parts) if parts else None
+
+
+def _time_eff(events, baseline_ms):
+    """Correct answers only, against the CROSS-SESSION personal baseline (student_baselines/{uid})."""
+    ts = [e["timeMs"] for e in events if e.get("correct") and e.get("timeMs")]
+    if not baseline_ms or len(ts) < 3:
+        return None
+    return statistics.fmean(min(baseline_ms / t, 1.0) for t in ts)
+
+
+def _task_comp(recent_sessions):
+    """Last N sessions, abandoned ones included (summary is None => not completed)."""
+    if not recent_sessions:
+        return None
+    return sum(1 for s in recent_sessions if (s.get("summary") or {}).get("completed")) / len(recent_sessions)
+
+
+def _lrn_vel(correct):
+    n = len(correct)
+    if n < 6:
+        return None
+    half = n // 2
+    a, b = sum(correct[:half]) / half, sum(correct[half:]) / (n - half)
+    if min(a, b) >= 0.9:                  # sustained mastery: ceiling, not "no change"
+        return 0.9
+    return max(0.0, min(1.0, 0.5 + (b - a) / 2))` },
+
+pytest: { title: 'backend/tests — golden vectors and regression tests for the defects found in this audit', lang: 'python', code: String.raw`import pytest
+from services import dase_engine as d
+
+
+def ev(i, correct, t=5000, **kw):
+    base = dict(type="question", questionId=f"q{i}", difficulty=3, correct=correct, selected="x", timeMs=t,
+                answerChanges=0, reRead=False, revisits=0, focusRatio=None, focusSamples=0)
+    return {**base, **kw}
+
+
+def test_consist_does_not_reward_uniform_failure():          # audit: all-wrong currently scores 1.0
+    all_wrong = [ev(i, False) for i in range(8)]
+    assert d.compute_parameters(all_wrong).get("CONSIST", 0.0) < 0.5
+
+
+def test_adj_acc_exists_for_a_perfect_session():              # audit: currently absent
+    assert "ADJ_ACC" in d.compute_parameters([ev(i, True) for i in range(6)])
+
+
+def test_lrn_vel_separates_mastery_from_failure():            # audit: both currently 0.5
+    good = d.compute_parameters([ev(i, True) for i in range(8)]).get("LRN_VEL")
+    bad  = d.compute_parameters([ev(i, False) for i in range(8)]).get("LRN_VEL")
+    assert good > bad
+
+
+@pytest.mark.parametrize("profile", list(d.load_config()["profiles"]))
+def test_composite_invariants(profile):
+    params = {k: 0.7 for k in d.load_config()["_parameters"]}
+    r = d.compute_dase(params, profile)
+    assert 0.0 <= r["score"] <= 1.0 and 0.0 <= r["coverage"] <= 1.0
+    assert abs(sum(d.profile_weights(profile).values()) - 1.0) < 1e-6      # audit: adhd, dyslexia = 1.10
+
+
+def test_every_weighted_parameter_is_defined():               # audit: PATTERN is weighted but undefined
+    cfg = d.load_config()
+    for name, p in cfg["profiles"].items():
+        assert set(p["weights"]) <= set(cfg["_parameters"]), name
+
+
+def test_classifier_abstains_without_focus_data():
+    c = d.classify_error(time_ms=1200, prior_times_ms=[5000] * 5)
+    assert c.label == d.KNOWLEDGE_GAP and c.confidence <= 0.3 and d.ATTENTION_LAPSE in c.alternatives
+
+
+def test_frontend_shaped_event_carries_measured_signals():    # would have caught the hard-coded telemetry
+    raw = load_fixture("question_event_from_quizpage.json")     # generated from the TS QuestionEvent type
+    assert raw["answerChanges"] is not None and raw["timeToFirstInteractionMs"] is not None` },
+
+mathsteps: { title: 'services/math_steps.py — never eval model output; verify every step deterministically', lang: 'python', code: String.raw`import ast
+import operator as op
+from fractions import Fraction
+
+_OPS = {ast.Add: op.add, ast.Sub: op.sub, ast.Mult: op.mul, ast.Div: op.truediv}   # no Pow: no huge numbers
+
+
+def safe_eval(expr: str) -> Fraction:
+    if len(expr) > 60:
+        raise ValueError("expression too long")
+
+    def ev(n):
+        if isinstance(n, ast.Expression):
+            return ev(n.body)
+        if isinstance(n, ast.Constant) and isinstance(n.value, (int, float)) and not isinstance(n.value, bool):
+            return Fraction(str(n.value))
+        if isinstance(n, ast.BinOp) and type(n.op) in _OPS:
+            return _OPS[type(n.op)](ev(n.left), ev(n.right))
+        if isinstance(n, ast.UnaryOp) and isinstance(n.op, ast.USub):
+            return -ev(n.operand)
+        raise ValueError("unsupported syntax")
+
+    return ev(ast.parse(expr, mode="eval"))
+
+
+def verify_steps(steps: list[dict]) -> list[dict]:
+    """steps: [{"op": "add", "expr": "12+7", "result": "19", "say": "12 plus 7 is 19"}, ...]"""
+    verified = []
+    for s in steps:
+        try:
+            if safe_eval(s["expr"]) == safe_eval(str(s["result"])):
+                verified.append(s)
+        except (ValueError, ZeroDivisionError, KeyError, SyntaxError):
+            continue                      # an unverifiable step is dropped, never shown to a child
+    return verified
+
+
+# Error typing (deterministic first; the LLM only explains): PLACE_VALUE, OPERATION_CONFUSION,
+# CARRY_BORROW, FACT_RECALL, SEQUENCING — e.g. answer == a - b when the item was a + b  => OPERATION_CONFUSION.` },
+
+knowexpr: { title: 'Knowledge vs expression (dysgraphia) — definitions', lang: 'text', code: String.raw`KNOW = |{ c in expected_concepts : judge(c, answer).evidenced }| / |expected_concepts|
+       each "evidenced" concept must quote a verbatim span from the answer; the LLM only LABELS,
+       the aggregation is deterministic code.
+
+EXPR = 0.4*organisation + 0.3*completeness + 0.3*mechanics          # each 0..1 from a rubric
+
+dysgraphia profile :  KNOW  -> scored          (carries the weight WRIT_EXP has today)
+                      EXPR  -> diagnosticOnly  (reported, never scored: a more severe form of the
+                                                condition would lower it regardless of learning)
+default profile    :  both may be scored
+Dashboard          :  always show the two side by side.` },
+
+pacing: { title: 'services/pacing.py — auto-pacing from personal behaviour (constants are assumptions)', lang: 'python', code: String.raw`def observed_wpm(words: int, elapsed_ms: int, paused_ms: int):
+    active = elapsed_ms - paused_ms
+    return words / (active / 60000) if words >= 20 and active > 1000 else None
+
+
+def next_wpm(prev: float, observed: float, replay_rate: float) -> float:
+    ema = 0.7 * prev + 0.3 * observed          # smooth: one fast/slow session must not whip-saw the rate
+    if replay_rate > 0.3:                      # re-listening to >30 % of sentences => slow down
+        ema *= 0.9
+    return max(80.0, min(300.0, ema))          # safety clamp
+
+
+def soft_prompt_after_ms(personal_median_ms: float) -> float:
+    return 3.0 * personal_median_ms            # a gentle "want a hint?" nudge — never a timeout
+# Suggest, don't silently change, for profiles where slower is expected. Tune 0.7/0.3, 0.9, 80-300 in the pilot.` },
+
+hesitation: { title: 'services/hesitation.py — interaction-only hesitation index (never facial, never “anxiety”)', lang: 'python', code: String.raw`def _c(x: float) -> float:
+    return max(0.0, min(1.0, x))
+
+
+def hesitation_index(latency_ratio: float, mean_answer_changes: float,
+                     blur_per_question: float, chat_frustration: float) -> float:
+    z  = _c((latency_ratio - 1.0) / 2.0)      # pre-answer latency vs OWN baseline: 1x -> 0, >=3x -> 1
+    ch = _c(mean_answer_changes / 3.0)
+    bl = _c(blur_per_question)                # tab-blur events / questions
+    ct = _c(chat_frustration)                 # mean LLM frustration_score in the session, 0 if none
+    return _c(0.30 * z + 0.25 * ch + 0.20 * bl + 0.25 * ct)    # weights: unvalidated assumptions
+
+
+# RESIL = 1 - HES   -> "higher is better", matching its positive DASE weight (FRUST's name implies the opposite).
+# Interventions (offer a break / micro-blocks / calm mode) are SUGGESTIONS the student can decline.` },
+
+radar: { title: 'components/teacher/DaseRadar.tsx — diagnostic-only drawn distinctly, table twin for screen readers', lang: 'tsx', code: String.raw`const rows = Object.entries(latest.parameters).map(([k, v]) => ({
+  key: k, label: PARAM_LABEL[k] ?? k, value: v as number,
+  diagnostic: k in (latest.diagnosticOnly ?? {}),
+}));                                                   // unmeasured parameters are omitted, not plotted at 0
+
+const summary = 'Strongest: ' + top.label + ' ' + top.value.toFixed(2) +
+                '; lowest: ' + low.label + ' ' + low.value.toFixed(2) + '. Coverage ' + Math.round(latest.coverage * 100) + ' percent.';
+
+<figure aria-labelledby="radar-cap">
+  <figcaption id="radar-cap">DASE parameters ({latest.profile} profile)</figcaption>
+  <div role="img" aria-label={summary}>
+    <ResponsiveContainer width="100%" height={320}>
+      <RadarChart data={rows}>
+        <PolarGrid /><PolarAngleAxis dataKey="label" /><PolarRadiusAxis domain={[0, 1]} tickCount={5} />
+        <Radar name="Scored" dataKey={(r) => (r.diagnostic ? null : r.value)} stroke="#2a14b4" fill="#2a14b4" fillOpacity={0.35} />
+        <Radar name="Reported, not scored" dataKey={(r) => (r.diagnostic ? r.value : null)} stroke="#0f766e" fill="none" strokeDasharray="5 4" />
+        <Legend />
+      </RadarChart>
+    </ResponsiveContainer>
+  </div>
+  <details><summary>View as table</summary>
+    <table><thead><tr><th scope="col">Parameter</th><th scope="col">Value</th><th scope="col">Used in score?</th></tr></thead>
+      <tbody>{rows.map((r) => (<tr key={r.key}><th scope="row">{r.label}</th><td>{r.value.toFixed(2)}</td><td>{r.diagnostic ? 'No — reported only' : 'Yes'}</td></tr>))}</tbody>
+    </table>
+  </details>
+</figure>
+// A same-profile reference polygon is fine for DISPLAY only when n >= 5; never use cohort medians for scoring.` },
+
+dossier: { title: 'docs/claims/claim_map.yaml — the dossier build FAILS if any pointer does not resolve', lang: 'yaml', code: String.raw`# Human-authored, attorney-reviewed. build_dossier.py resolves every pointer (symbol exists, test passes,
+# sample output present) and lists unresolved elements under "NOT YET REDUCED TO PRACTICE".
+claims:
+  - id: C1
+    text: "Weighting a plurality of learning parameters by a disability profile, scoring only the parameters that are
+           measurable and not diagnostic-only for that profile, renormalising the weights, and reporting a coverage value."
+    elements:
+      - { id: C1.a, code: "backend/services/dase_engine.py::profile_weights",  test: "tests/test_dase_formulas.py::test_composite_invariants" }
+      - { id: C1.b, code: "backend/services/dase_engine.py::compute_dase",      test: "tests/test_dase_formulas.py::test_composite_invariants",
+          evidence: { config: "backend/data/dase_profiles.json", sha256: auto } }
+  - id: C2
+    text: "Classifying an incorrect response by probable cause using response time relative to the student's own baseline
+           and a looking-at-screen signal, outputting a confidence and abstaining when signals are insufficient."
+    elements:
+      - { id: C2.a, code: "backend/services/dase_engine.py::classify_error",    test: "tests/test_classifier.py" }
+      - { id: C2.b, code: "frontend/src/pages/QuizPage.tsx::classifyWrongAnswer", test: "e2e/closed_loop.spec.ts" }
+  - id: C3
+    text: "Re-presenting a pre-generated, profile-constrained simpler variant of an item when the cause is a comprehension
+           barrier at or above a confidence threshold."
+    elements:
+      - { id: C3.a, code: "backend/services/dase_engine.py::should_represent", test: "tests/test_classifier.py" }
+build:
+  outputs: [patent_dossier.md, patent_dossier.json]
+  include: [formula_sheet, ablation_results, coverage_distribution, error_cause_mix (anonymised), caveats]
+  llm: { role: "draft prose from structured evidence only", post_check: "reject any sentence without an evidence id" }` },
+};
+
+/* ───────────── FORMULA SHEET ───────────── */
+const FORMULAS = [
+  { p: 'ACC', now: 'correct ÷ answered', verdict: 'ok', note: 'Baseline.' },
+  { p: 'ADJ_ACC', now: '(Σ 1.0 per correct + 0.75·confidence per attention-lapse error) ÷ n; only emitted if some wrong answer is classified', verdict: 'fix', note: 'S07 — absent for perfect sessions; requires classifier data that is not collected (S03). Proposed: emit when no wrong answers or ≥80 % of wrong answers are classified.' },
+  { p: 'COMP', now: 'accuracy on items with difficulty ≥ 3 (≥ 3 such items)', verdict: 'ok', note: 'difficulty is LLM-assigned and unvalidated — say so in any claim.' },
+  { p: 'TIME_EFF', now: 'mean( min(sessionMedian ÷ t, 1) ) over all answers', verdict: 'fix', note: 'S09 — credits fast wrong answers; baseline is the same session. Proposed: correct answers only vs cross-session baseline.' },
+  { p: 'ATT_SPAN', now: 'mean face-presence ratio (≥5 samples)', verdict: 'blocked', note: 'S04 — never receives data. Diagnostic-only for ADHD (correct). Call it face-presence, not attention.' },
+  { p: 'CONSIST', now: '1 − 4·mean(pvariance(correct) within difficulty band) = 1 − 4p(1−p)', verdict: 'fix', note: 'S08 — 0 % accuracy → 1.00, 50 % → 0.00 (verified). Proposed: CV of correct-answer times blended with cross-session accuracy stability.' },
+  { p: 'EFFORT', now: 'mean(0.3·changed answer + 0.2·re-read + 0.2·revisit + 0.3·(t ≥ ½ median))', verdict: 'blocked', note: 'S03 — all inputs but time are literals, so EFFORT ∈ {0, 0.3}. Weighted 0.10–0.25 in all 13 profiles.' },
+  { p: 'LRN_VEL', now: '0.5 + (acc₂ − acc₁)/2, n ≥ 6', verdict: 'fix', note: 'S19 — perfect and all-wrong students both = 0.50 (verified).' },
+  { p: 'TASK_COMP', now: 'completed ÷ started over the current session only', verdict: 'fix', note: 'S10 — always 1.0 for an evaluated session. Proposed: last N sessions incl. abandoned.' },
+  { p: 'READ_FL', now: 'mean(wpm) ÷ 200, capped 1', verdict: 'blocked', note: 'S20 — no ReadingEvents emitted; ignores comprehension despite its definition.' },
+  { p: 'VOICE_Q', now: '0.6·understoodRate + 0.4·sttConfidence − 0.2·repeatPenalty (≥3 events)', verdict: 'blocked', note: 'S06 — formula fine, events never emitted/loaded. Measures the interface, not the learner.' },
+  { p: 'NAV_EFF', now: 'mean(min(4000 ms ÷ actionMs, 1)) over understood commands × understoodRate', verdict: 'blocked', note: 'S06 — same. 4000 ms target is an unvalidated constant.' },
+  { p: 'PATTERN', now: '— (weight 0.20 in autism; not defined anywhere)', verdict: 'missing', note: 'S12 — define via item taxonomy (sequence/category/matching accuracy).' },
+  { p: 'FRUST', now: '— (weight 0.05 in 7 profiles; no source)', verdict: 'missing', note: 'S12 — rename RESIL = 1 − HES so “higher is better” matches the positive weight.' },
+  { p: 'VIS_ENG', now: '— (0.15–0.20 in deaf / hard_of_hearing)', verdict: 'missing', note: 'D05 — needs VisualSummary engagement events.' },
+  { p: 'WRIT_EXP', now: '— (0.15 in deaf, dysgraphia)', verdict: 'missing', note: 'E05 — split into KNOW (scored) and EXPR (diagnostic-only under dysgraphia).' },
+  { p: 'Composite', now: 'score = Σ pₖ·wₖ ÷ Σ wₖ over measurable, non-diagnostic k;  coverage = Σ wₖ(used) ÷ Σ wₖ(scorable)', verdict: 'ok', note: 'Verified by execution. The renormalisation + coverage + diagnostic-only rule is the strongest, most original part of the engine.' },
+  { p: 'Classifier', now: 'timed-out or ≥2× own median → PROCESSING_DELAY; ≤0.5× & focus<0.6 → ATTENTION_LAPSE; ≤0.33× & focus≥0.6 & no re-read → COMPREHENSION_BARRIER; else KNOWLEDGE_GAP; abstains (0.30) without focus data', verdict: 'ok', note: 'Logic verified on a truth table; thresholds (2.0, 0.5, 0.33, 0.6, 0.45) are literature-informed, unvalidated. Response-time-effort / rapid-guessing detection is established psychometrics — expect it in prior art.' },
+];
+
+/* ───────────── PATENT-CRITICAL NOVELTIES ───────────── */
+const NOVELTIES = [
+  { id: 'N1', name: 'Disability-conditioned multi-dimensional composite', gaps: ['S01', 'S07', 'S08', 'S09', 'S10', 'S12', 'S13', 'S14', 'S19'],
+    what: 'Per-profile weights over measured parameters; unmeasurable parameters excluded and weights renormalised; coverage reported; diagnostic-only exclusion rule.',
+    risk: 'Pure weighted-sum maths is vulnerable to “abstract idea / mathematical method” objections (US §101; India §3(k)). Anchor claims to the sensor → classification → adaptation pipeline. Weights are unvalidated; three formulas are currently wrong.' },
+  { id: 'N2', name: 'Cause-based error classification with abstention', gaps: ['S02', 'S03', 'S04', 'S15'],
+    what: 'Four-way cause label from response time vs the student’s OWN baseline + looking-at-screen signal, with confidence, alternatives and abstention.',
+    risk: 'Response-time-effort / rapid-guessing detection is established; the research doc’s “no system does this” is an untested assertion. The claim is only as good as the telemetry — which is currently hard-coded.' },
+  { id: 'N3', name: 'Classification-triggered closed-loop re-presentation', gaps: ['S05', 'S03'],
+    what: 'On a confident comprehension-barrier label, serve a pre-generated, profile-constrained simpler variant of the same item.',
+    risk: 'Backend is built; no UI runs it. Without a working loop there is no reduction to practice for this claim.' },
+  { id: 'N4', name: 'Voice-first adaptive navigation with interface-quality metrics', gaps: ['B01', 'B02', 'B04', 'B07', 'B15', 'S06'],
+    what: 'Rules-first / validated-LLM-fallback intent routing, spoken read-back before commit, earcon orientation, and VOICE_Q / NAV_EFF that score the interface rather than the learner.',
+    risk: 'Only the backend intent engine exists. The frontend voice layer is documented as built but absent from every branch.' },
+  { id: 'N5', name: 'Knowledge-vs-expression separated scoring', gaps: ['E04', 'E05', 'E06'],
+    what: 'Dictation → structured essay; KNOW scored and EXPR diagnostic-only for dysgraphia.',
+    risk: 'Not built. Strong fit with the engine’s own diagnostic-only principle.' },
+  { id: 'N6', name: 'Verified micro-step math decomposition + error typing', gaps: ['E02', 'E01', 'E03'],
+    what: 'LLM decomposition whose every step is deterministically verified before a child sees it; conceptual-vs-procedural error typing.',
+    risk: 'Not built; “LLM + verifier” patterns are common — the error-typing and profile coupling are the differentiators.' },
+  { id: 'N7', name: 'Interaction-only hesitation index & auto-pacing', gaps: ['E10', 'E11', 'E09', 'S20'],
+    what: 'Personal pacing from reading/latency behaviour and a non-clinical hesitation signal that triggers opt-in supports.',
+    risk: 'Not built. Keep claims non-clinical (docs/ROADMAP.md rightly rejects facial anxiety inference).' },
+  { id: 'N8', name: 'Text-to-visual structure summary with validation/degradation (DHH)', gaps: ['D01', 'D05', 'D02'],
+    what: 'Single cached LLM call → validated Mermaid diagram + concept cards with graceful fallback.',
+    risk: 'Service exists but is unreachable. Generic “LLM makes a diagram” is weak on its own; tie to engagement measurement (VIS_ENG).' },
+];
+
+/* ───────────── STATE ───────────── */
+const STORE_KEY = 'eduease.patent-plan.v1';
+const state = { done: {}, tab: 'overview', f: { m: '', sev: '', pat: '', st: '', q: '' }, phase: 'all' };
+
+function loadState() {
+  try { const raw = localStorage.getItem(STORE_KEY); if (raw) state.done = JSON.parse(raw).done || {}; } catch (e) { /* storage unavailable: run in memory */ }
+}
+function saveState() {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify({ done: state.done })); } catch (e) { /* ignore */ }
+}
+
+/* ───────────── HELPERS ───────────── */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const pct = (x) => Math.round(x * 100);
+const fmtDays = (d) => (Math.round(d * 10) / 10).toString();
+
+const SEV_CLASS = {
+  Critical: 'bg-red-100 text-red-900 ring-red-300 dark:bg-red-950 dark:text-red-100 dark:ring-red-700',
+  High: 'bg-orange-100 text-orange-900 ring-orange-300 dark:bg-orange-950 dark:text-orange-100 dark:ring-orange-700',
+  Medium: 'bg-amber-100 text-amber-900 ring-amber-300 dark:bg-amber-950 dark:text-amber-100 dark:ring-amber-700',
+};
+const SEV_ICON = { Critical: '▲▲', High: '▲', Medium: '●' };
+const PAT_CLASS = {
+  'High novelty': 'bg-violet-100 text-violet-900 ring-violet-300 dark:bg-violet-950 dark:text-violet-100 dark:ring-violet-700',
+  Supporting: 'bg-sky-100 text-sky-900 ring-sky-300 dark:bg-sky-950 dark:text-sky-100 dark:ring-sky-700',
+  Baseline: 'bg-slate-100 text-slate-800 ring-slate-300 dark:bg-slate-800 dark:text-slate-100 dark:ring-slate-600',
+};
+const ST_CLASS = {
+  done: 'text-emerald-800 dark:text-emerald-300',
+  partial: 'text-amber-800 dark:text-amber-300',
+  mock: 'text-fuchsia-800 dark:text-fuchsia-300',
+  missing: 'text-red-800 dark:text-red-300',
+};
+const ST_ICON = { done: '✔', partial: '◐', mock: '▨', missing: '✖' };
+
+const badge = (cls, text) => '<span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ring-inset whitespace-nowrap ' + cls + '">' + text + '</span>';
+
+/* ───────────── SCORING ───────────── */
+function tasksFor(gapId) { return TASKS.filter((t) => t.closes.indexOf(gapId) !== -1); }
+function gapProgress(g) {
+  const ts = tasksFor(g.id);
+  if (!ts.length) return 0;
+  return ts.filter((t) => state.done[t.id]).length / ts.length;
+}
+function credit(g, withProgress) {
+  const base = ST_CREDIT[g.st];
+  if (g.st === 'done' || !withProgress) return base;
+  return base + (1 - base) * gapProgress(g);
+}
+function moduleScore(mid, withProgress) {
+  let num = 0, den = 0;
+  GAPS.filter((g) => g.m === mid).forEach((g) => { const w = SEV_W[g.sev]; num += w * credit(g, withProgress); den += w; });
+  return den ? num / den : 0;
+}
+function overall(withProgress) {
+  return MODULES.reduce((a, m) => a + m.weight * moduleScore(m.id, withProgress), 0);
+}
+function novelty(n, withProgress) {
+  const gs = n.gaps.map((id) => GAPS.find((g) => g.id === id)).filter(Boolean);
+  return gs.reduce((a, g) => a + credit(g, withProgress), 0) / gs.length;
+}
+function band(score) {
+  if (score < 0.35) return { label: 'Early prototype', cls: 'text-red-700 dark:text-red-300', stroke: '#dc2626' };
+  if (score < 0.6) return { label: 'Partial reduction to practice', cls: 'text-amber-700 dark:text-amber-300', stroke: '#d97706' };
+  if (score < 0.8) return { label: 'Approaching filing-ready', cls: 'text-sky-700 dark:text-sky-300', stroke: '#0284c7' };
+  return { label: 'Filing-ready pending attorney review', cls: 'text-emerald-700 dark:text-emerald-300', stroke: '#059669' };
+}
+const isOpen = (g) => credit(g, true) < 1;
+
+/* ───────────── OVERVIEW ───────────── */
+function ringSvg(score) {
+  const r = 54, c = 2 * Math.PI * r, b = band(score);
+  return '<svg viewBox="0 0 140 140" class="w-44 h-44" role="img" aria-label="Overall patent-readiness ' + pct(score) + ' percent">' +
+    '<circle cx="70" cy="70" r="' + r + '" fill="none" stroke-width="14" class="stroke-slate-200 dark:stroke-slate-700"/>' +
+    '<circle cx="70" cy="70" r="' + r + '" fill="none" stroke="' + b.stroke + '" stroke-width="14" stroke-linecap="round" stroke-dasharray="' + (c * score).toFixed(1) + ' ' + c.toFixed(1) + '" transform="rotate(-90 70 70)"/>' +
+    '<text x="70" y="76" text-anchor="middle" font-size="30" font-weight="800" class="fill-slate-900 dark:fill-slate-100">' + pct(score) + '%</text></svg>';
+}
+
+const RADAR_LABEL = { AUTH: 'Auth', BVI: 'BVI voice', DEAF: 'Deaf visuals', DASE: 'DASE', EXP: 'Dyscalc/Dysgraph/Anxiety', TEACH: 'Teacher' };
+function radarSvg() {
+  const cx = 170, cy = 165, R = 105, n = MODULES.length;
+  const pt = (i, v) => { const a = -Math.PI / 2 + (i * 2 * Math.PI) / n; return [cx + Math.cos(a) * R * v, cy + Math.sin(a) * R * v]; };
+  let s = '<svg viewBox="-60 0 460 330" class="w-full max-w-md mx-auto" role="img" aria-label="Radar of module readiness; values are listed in the bars beside it">';
+  [0.25, 0.5, 0.75, 1].forEach((k) => {
+    s += '<polygon points="' + MODULES.map((_, i) => pt(i, k).join(',')).join(' ') + '" fill="none" class="stroke-slate-300 dark:stroke-slate-700" stroke-width="1"/>';
+  });
+  MODULES.forEach((m, i) => {
+    const [x, y] = pt(i, 1), [lx, ly] = pt(i, 1.2);
+    s += '<line x1="' + cx + '" y1="' + cy + '" x2="' + x + '" y2="' + y + '" class="stroke-slate-300 dark:stroke-slate-700"/>';
+    const anchor = lx < cx - 8 ? 'end' : lx > cx + 8 ? 'start' : 'middle';
+    s += '<text x="' + lx.toFixed(1) + '" y="' + ly.toFixed(1) + '" text-anchor="' + anchor + '" font-size="10.5" class="fill-slate-700 dark:fill-slate-200">' + esc(RADAR_LABEL[m.id]) + '</text>';
+  });
+  const poly = (withProgress) => MODULES.map((m, i) => pt(i, Math.max(moduleScore(m.id, withProgress), 0.02)).map((v) => v.toFixed(1)).join(',')).join(' ');
+  s += '<polygon points="' + poly(false) + '" fill="none" stroke="#64748b" stroke-width="2" stroke-dasharray="5 4"/>';
+  s += '<polygon points="' + poly(true) + '" fill="rgba(99,102,241,.28)" stroke="#6366f1" stroke-width="2.5"/>';
+  s += '</svg>';
+  return s;
+}
+
+function renderOverview() {
+  const base = overall(false), now = overall(true), b = band(now);
+  const openGaps = GAPS.filter(isOpen);
+  const bySev = { Critical: 0, High: 0, Medium: 0 };
+  openGaps.forEach((g) => { bySev[g.sev] += 1; });
+  const byStatus = { done: 0, partial: 0, mock: 0, missing: 0 };
+  GAPS.forEach((g) => { byStatus[g.st] += 1; });
+  const tDone = TASKS.filter((t) => state.done[t.id]).length;
+  const daysAll = TASKS.reduce((a, t) => a + t.days, 0);
+  const daysLeft = TASKS.filter((t) => !state.done[t.id]).reduce((a, t) => a + t.days, 0);
+
+  const modRows = MODULES.map((m) => {
+    const b0 = moduleScore(m.id, false), n0 = moduleScore(m.id, true);
+    const crit = GAPS.filter((g) => g.m === m.id && g.sev === 'Critical' && isOpen(g)).length;
+    const total = GAPS.filter((g) => g.m === m.id).length;
+    return '<li class="py-3">' +
+      '<div class="flex items-baseline justify-between gap-3 flex-wrap">' +
+      '<button type="button" data-goto-module="' + m.id + '" class="text-left font-semibold underline decoration-dotted underline-offset-4 hover:text-indigo-700 dark:hover:text-indigo-300">' + esc(m.name) + '</button>' +
+      '<span class="text-sm tabular-nums"><span class="font-bold text-lg">' + pct(n0) + '%</span> <span class="text-slate-600 dark:text-slate-400">(audit baseline ' + pct(b0) + '%)</span></span></div>' +
+      '<div class="relative mt-2 h-3 rounded-full bg-slate-200 dark:bg-slate-700" role="img" aria-label="' + esc(m.short) + ' readiness ' + pct(n0) + ' percent">' +
+      '<div class="h-3 rounded-full bg-indigo-600 dark:bg-indigo-400" style="width:' + pct(n0) + '%"></div>' +
+      '<div class="absolute top-[-3px] h-[18px] w-[3px] bg-slate-900 dark:bg-white" style="left:calc(' + pct(b0) + '% - 1px)" title="audit baseline"></div></div>' +
+      '<p class="mt-1 text-xs text-slate-600 dark:text-slate-400">' + esc(m.why) + ' · weight ' + pct(m.weight) + '% · ' + total + ' findings' + (crit ? ' · <strong class="text-red-700 dark:text-red-300">' + crit + ' critical open</strong>' : '') + '</p></li>';
+  }).join('');
+
+  const blockers = GAPS.filter((g) => g.sev === 'Critical' && isOpen(g))
+    .sort((a, b2) => (b2.pat === 'High novelty') - (a.pat === 'High novelty'))
+    .slice(0, 10)
+    .map((g) => '<li class="flex gap-2 py-1.5"><button type="button" data-goto-gap="' + g.id + '" class="font-mono text-xs font-bold text-indigo-700 dark:text-indigo-300 underline shrink-0">' + g.id + '</button><span class="text-sm">' + esc(g.title) + '</span></li>').join('');
+
+  const stat = (label, val, cls) => '<div class="rounded-xl border border-slate-200 dark:border-slate-700 p-3"><div class="text-2xl font-extrabold tabular-nums ' + (cls || '') + '">' + val + '</div><div class="text-xs text-slate-600 dark:text-slate-400">' + label + '</div></div>';
+
+  $('#panel-overview').innerHTML =
+    '<div class="grid gap-6 lg:grid-cols-3">' +
+      '<div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-6 flex flex-col items-center text-center">' +
+        '<h2 class="text-sm font-bold uppercase tracking-wide text-slate-600 dark:text-slate-400">Overall patent-readiness</h2>' +
+        ringSvg(now) +
+        '<p class="mt-1 text-lg font-bold ' + b.cls + '">' + b.label + '</p>' +
+        '<p class="text-sm text-slate-600 dark:text-slate-400 mt-1">Audit baseline <strong>' + pct(base) + '%</strong>' + (now > base + 0.0005 ? ' → projected <strong>' + pct(now) + '%</strong> from ' + tDone + ' ticked tasks' : ' · tick tasks in the Roadmap to project progress') + '</p>' +
+        '<p class="text-xs text-slate-500 dark:text-slate-400 mt-3">A working-engineering rubric, not a legal opinion. See “Method” for how it is computed.</p>' +
+      '</div>' +
+      '<div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-6 lg:col-span-2">' +
+        '<h2 class="text-sm font-bold uppercase tracking-wide text-slate-600 dark:text-slate-400 mb-1">Readiness by module</h2>' +
+        '<div class="grid gap-4 md:grid-cols-5 items-center"><ul class="md:col-span-3 divide-y divide-slate-200 dark:divide-slate-700">' + modRows + '</ul>' +
+        '<div class="md:col-span-2">' + radarSvg() + '<p class="text-xs text-center text-slate-500 dark:text-slate-400">dashed = audit baseline · filled = with ticked tasks</p></div></div>' +
+      '</div>' +
+    '</div>' +
+
+    '<div class="mt-6 grid gap-3 grid-cols-2 sm:grid-cols-4 lg:grid-cols-8">' +
+      stat('findings total', GAPS.length) +
+      stat('critical open', bySev.Critical, 'text-red-700 dark:text-red-300') +
+      stat('high open', bySev.High, 'text-orange-700 dark:text-orange-300') +
+      stat('medium open', bySev.Medium, 'text-amber-700 dark:text-amber-300') +
+      stat('mocked / placeholder', byStatus.mock, 'text-fuchsia-700 dark:text-fuchsia-300') +
+      stat('verified working', byStatus.done, 'text-emerald-700 dark:text-emerald-300') +
+      stat('tasks ticked', tDone + ' / ' + TASKS.length) +
+      stat('dev-days remaining', fmtDays(daysLeft) + ' / ' + fmtDays(daysAll)) +
+    '</div>' +
+
+    '<div class="mt-6 grid gap-6 lg:grid-cols-2">' +
+      '<section class="rounded-2xl border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/40 p-6" aria-labelledby="h-blockers">' +
+        '<h2 id="h-blockers" class="font-bold text-red-900 dark:text-red-100 mb-2">Critical blockers still open</h2><ul>' + (blockers || '<li class="text-sm">None — every critical finding has all its tasks ticked.</li>') + '</ul></section>' +
+      '<section class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-6" aria-labelledby="h-know">' +
+        '<h2 id="h-know" class="font-bold mb-2">What the audit found, in six lines</h2><ol class="list-decimal ml-5 space-y-2 text-sm">' +
+          '<li><strong>The scoring engine is real; its inputs are not.</strong> The DASE composite and classifier logic execute correctly, but the quiz emits hard-coded telemetry, never calls the classifier, and never feeds it focus data — so error causes are always “unclassified”.</li>' +
+          '<li><strong>Voice-first does not exist in the frontend.</strong> The docs describe VoiceNavigator, speech.ts, VisualSummary and a passing test suite; those files are in no branch. Nothing speaks on load.</li>' +
+          '<li><strong>Any teacher can read any student’s analytics</strong> and any user can read/write any session; the public form lets anyone register as a teacher (no rules file in the repo to say otherwise); the admin password is in source.</li>' +
+          '<li><strong>Three formulas are mathematically off:</strong> CONSIST rewards failing uniformly, ADJ_ACC vanishes for perfect sessions, LRN_VEL cannot tell mastery from failure (all verified by execution).</li>' +
+          '<li><strong>The camera starts for everyone,</strong> including blind students and non-consenters.</li>' +
+          '<li><strong>The DASE code is staged but uncommitted,</strong> and the docs mark unbuilt phases “complete” — weak evidence of reduction to practice.</li></ol></section>' +
+    '</div>' +
+
+    '<section class="mt-6 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-6" aria-labelledby="h-exec">' +
+      '<h2 id="h-exec" class="font-bold mb-1">Measured, not inferred</h2>' +
+      '<p class="text-sm text-slate-600 dark:text-slate-400 mb-3">The backend engine was run on events shaped exactly like the ones <code>QuizPage.tsx</code> emits today (9 questions, 6 correct, real timings, literals for everything else):</p>' +
+      '<div class="overflow-x-auto"><table class="w-full text-sm"><caption class="sr-only">DASE result for QuizPage-shaped events, by profile</caption>' +
+      '<thead><tr class="text-left border-b border-slate-300 dark:border-slate-600"><th scope="col" class="py-1 pr-4">Profile</th><th scope="col" class="pr-4">Score</th><th scope="col" class="pr-4">Coverage</th><th scope="col">Missing parameters</th></tr></thead><tbody class="divide-y divide-slate-200 dark:divide-slate-700">' +
+      [['adhd', '0.543', '0.653', 'ADJ_ACC (heaviest weight, 0.28), FRUST'], ['dyslexia', '0.587', '0.947', 'FRUST'], ['blind', '0.572', '0.632', 'VOICE_Q, NAV_EFF, FRUST'], ['deaf', '0.557', '0.600', 'VIS_ENG, WRIT_EXP, FRUST'], ['autism', '0.545', '0.750', 'PATTERN, FRUST'], ['anxiety', '0.609', '1.000', '—']]
+        .map((r) => '<tr><th scope="row" class="py-1 pr-4 font-medium">' + r[0] + '</th><td class="pr-4 tabular-nums">' + r[1] + '</td><td class="pr-4 tabular-nums">' + r[2] + '</td><td>' + r[3] + '</td></tr>').join('') +
+      '</tbody></table></div>' +
+      '<p class="text-sm mt-3">Error breakdown for the same session: <code>counts = 0/0/0/0, totalWrong = 3, unclassified = 3</code>. Other checks: all-wrong session → <code>CONSIST = 1.0</code>; 50 % → <code>0.0</code>; perfect and all-wrong both → <code>LRN_VEL = 0.5</code>; perfect session → no <code>ADJ_ACC</code>; fast+wrong with no focus data → <code>KNOWLEDGE_GAP @ 0.30</code>.</p>' +
+    '</section>';
+}
+
+/* ───────────── FINDINGS ───────────── */
+function filterGaps() {
+  const f = state.f, q = f.q.trim().toLowerCase();
+  return GAPS.filter((g) =>
+    (!f.m || g.m === f.m) && (!f.sev || g.sev === f.sev) && (!f.pat || g.pat === f.pat) && (!f.st || g.st === f.st) &&
+    (!q || (g.id + ' ' + g.title + ' ' + g.cat + ' ' + g.expected + ' ' + g.current + ' ' + g.ev).toLowerCase().indexOf(q) !== -1));
+}
+
+function renderFindingsShell() {
+  const sel = (id, label, opts, val) => '<label class="text-xs font-semibold block">' + label +
+    '<select id="' + id + '" class="mt-1 block w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-2 py-1.5 text-sm">' +
+    '<option value="">All</option>' + opts.map((o) => '<option value="' + esc(o[0]) + '"' + (val === o[0] ? ' selected' : '') + '>' + esc(o[1]) + '</option>').join('') + '</select></label>';
+  $('#panel-findings').innerHTML =
+    '<div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">' +
+    '<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">' +
+      sel('f-m', 'Module / category', MODULES.map((m) => [m.id, m.name]), state.f.m) +
+      sel('f-sev', 'Severity', ['Critical', 'High', 'Medium'].map((x) => [x, x]), state.f.sev) +
+      sel('f-pat', 'Patent value impact', ['High novelty', 'Supporting', 'Baseline'].map((x) => [x, x]), state.f.pat) +
+      sel('f-st', 'Codebase state', Object.keys(ST_LABEL).map((k) => [k, ST_LABEL[k]]), state.f.st) +
+      '<label class="text-xs font-semibold block">Search<input id="f-q" type="search" value="' + esc(state.f.q) + '" placeholder="id, file, keyword…" class="mt-1 block w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-2 py-1.5 text-sm"></label>' +
+    '</div><div class="mt-3 flex items-center justify-between flex-wrap gap-2"><p id="f-count" class="text-sm text-slate-600 dark:text-slate-400" aria-live="polite"></p>' +
+    '<button type="button" id="f-reset" class="text-sm underline">Clear filters</button></div></div>' +
+    '<div class="mt-4 overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">' +
+    '<table class="w-full min-w-[980px] text-sm align-top"><caption class="sr-only">Audit findings: expected feature versus current codebase state, with severity and patent value</caption>' +
+    '<thead class="bg-slate-100 dark:bg-slate-800 text-left text-xs uppercase tracking-wide"><tr>' +
+      '<th scope="col" class="p-3 w-[16%]">Finding &amp; category</th><th scope="col" class="p-3 w-[24%]">Expected feature</th><th scope="col" class="p-3 w-[38%]">Current codebase state</th>' +
+      '<th scope="col" class="p-3 w-[8%]">Severity</th><th scope="col" class="p-3 w-[8%]">Patent value</th><th scope="col" class="p-3 w-[6%]">State</th></tr></thead>' +
+    '<tbody id="f-body" class="divide-y divide-slate-200 dark:divide-slate-700"></tbody></table></div>';
+  renderFindingsRows();
+}
+
+function renderFindingsRows() {
+  const rows = filterGaps();
+  $('#f-count').textContent = 'Showing ' + rows.length + ' of ' + GAPS.length + ' findings';
+  $('#f-body').innerHTML = rows.map((g) => {
+    const ts = tasksFor(g.id);
+    const prog = gapProgress(g);
+    const chips = ts.map((t) => '<button type="button" data-goto-task="' + t.id + '" class="font-mono text-[11px] rounded px-1.5 py-0.5 ring-1 ring-inset ' + (state.done[t.id] ? 'bg-emerald-100 text-emerald-900 ring-emerald-300 dark:bg-emerald-950 dark:text-emerald-100 dark:ring-emerald-700' : 'bg-slate-100 text-slate-800 ring-slate-300 dark:bg-slate-800 dark:text-slate-100 dark:ring-slate-600') + '">' + (state.done[t.id] ? '✔ ' : '') + t.id + '</button>').join(' ');
+    const stateTxt = g.st === 'done' ? ST_LABEL.done : (prog === 1 ? 'Fix tasks ticked' : (prog > 0 ? pct(prog) + '% of fix tasks ticked' : ST_LABEL[g.st]));
+    return '<tr id="gap-' + g.id + '">' +
+      '<th scope="row" class="p-3 text-left font-normal"><div class="font-mono text-xs font-bold">' + g.id + '</div><div class="font-semibold leading-snug mt-0.5">' + esc(g.title) + '</div><div class="text-xs text-slate-600 dark:text-slate-400 mt-1">' + esc(MODULES.find((m) => m.id === g.m).short) + ' · ' + esc(g.cat) + '</div></th>' +
+      '<td class="p-3 text-slate-800 dark:text-slate-200">' + esc(g.expected) + '</td>' +
+      '<td class="p-3"><p>' + esc(g.current) + '</p><p class="mt-2 font-mono text-[11px] text-slate-600 dark:text-slate-400 break-words">' + esc(g.ev) + '</p>' + (chips ? '<p class="mt-2 flex flex-wrap gap-1 items-center"><span class="text-xs text-slate-600 dark:text-slate-400">Fix:</span> ' + chips + '</p>' : '') + '</td>' +
+      '<td class="p-3">' + badge(SEV_CLASS[g.sev], SEV_ICON[g.sev] + ' ' + g.sev) + '</td>' +
+      '<td class="p-3">' + badge(PAT_CLASS[g.pat], g.pat) + '</td>' +
+      '<td class="p-3 font-semibold ' + ST_CLASS[g.st] + '"><span aria-hidden="true">' + ST_ICON[g.st] + '</span> ' + esc(stateTxt) + '</td></tr>';
+  }).join('') || '<tr><td colspan="6" class="p-6 text-center text-slate-600 dark:text-slate-400">No findings match these filters.</td></tr>';
+}
+
+/* ───────────── ROADMAP ───────────── */
+function phaseStats(pid) {
+  const ts = TASKS.filter((t) => t.phase === pid);
+  const done = ts.filter((t) => state.done[t.id]);
+  return { n: ts.length, done: done.length, days: ts.reduce((a, t) => a + t.days, 0), daysDone: done.reduce((a, t) => a + t.days, 0) };
+}
+
+function snippetHtml(key) {
+  const s = SNIPPETS[key];
+  if (!s) return '';
+  return '<details class="mt-3 rounded-lg border border-slate-300 dark:border-slate-600"><summary class="cursor-pointer px-3 py-2 text-sm font-semibold">Code · ' + esc(s.title) + ' <span class="text-xs font-normal text-slate-500">(' + esc(s.lang) + ')</span></summary>' +
+    '<div class="relative"><button type="button" data-copy="' + key + '" class="absolute right-2 top-2 rounded bg-slate-700 text-white text-xs px-2 py-1 hover:bg-slate-600">Copy</button>' +
+    '<pre class="code" tabindex="0"><code data-snip="' + key + '"></code></pre></div></details>';
+}
+
+function taskHtml(t) {
+  const chk = !!state.done[t.id];
+  const files = t.files.map((f) => '<li class="flex gap-2 items-start"><span class="shrink-0 rounded px-1.5 text-[11px] font-bold uppercase ' + (f[0] === 'create' ? 'bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-100' : f[0] === 'delete' ? 'bg-red-100 text-red-900 dark:bg-red-950 dark:text-red-100' : 'bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-100') + '">' + f[0] + '</span><code class="text-xs break-all">' + esc(f[1]) + '</code></li>').join('');
+  const snips = [].concat(t.snip || []).map(snippetHtml).join('');
+  const closes = t.closes.map((id) => '<button type="button" data-goto-gap="' + id + '" class="font-mono text-[11px] rounded px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 ring-1 ring-inset ring-slate-300 dark:ring-slate-600">' + id + '</button>').join(' ');
+  return '<article id="task-' + t.id + '" class="rounded-xl border ' + (chk ? 'border-emerald-400 dark:border-emerald-700 bg-emerald-50/60 dark:bg-emerald-950/30' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900') + ' p-4">' +
+    '<div class="flex items-start gap-3"><input type="checkbox" id="chk-' + t.id + '" data-task="' + t.id + '" class="mt-1 h-5 w-5 accent-indigo-600" ' + (chk ? 'checked' : '') + '>' +
+    '<div class="flex-1 min-w-0"><label for="chk-' + t.id + '" class="font-semibold leading-snug cursor-pointer"><span class="font-mono text-xs text-indigo-700 dark:text-indigo-300 mr-1">' + t.id + '</span>' + esc(t.title) + '</label>' +
+    '<div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600 dark:text-slate-400"><span>≈ ' + fmtDays(t.days) + ' dev-day' + (t.days === 1 ? '' : 's') + '</span><span>·</span><span>Closes:</span> ' + closes + '</div></div></div>' +
+    '<details class="mt-3"><summary class="cursor-pointer text-sm font-semibold text-indigo-800 dark:text-indigo-300">Files, steps &amp; acceptance criteria</summary>' +
+    '<div class="mt-2 grid gap-4 md:grid-cols-2"><div><h4 class="text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-400 mb-1">Files</h4><ul class="space-y-1">' + files + '</ul></div>' +
+    '<div><h4 class="text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-400 mb-1">Acceptance</h4><p class="text-sm">' + esc(t.accept) + '</p></div></div>' +
+    '<h4 class="mt-3 text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-400 mb-1">Steps</h4><ol class="list-decimal ml-5 space-y-1.5 text-sm">' + t.steps.map((s) => '<li>' + esc(s) + '</li>').join('') + '</ol>' + snips + '</details></article>';
+}
+
+function renderRoadmap() {
+  const chips = [['all', 'All phases']].concat(PHASES.map((p) => [String(p.id), 'Phase ' + p.id])).map((c) =>
+    '<button type="button" role="tab" data-phase="' + c[0] + '" aria-selected="' + (state.phase === c[0]) + '" class="phase-chip rounded-full px-4 py-1.5 text-sm font-semibold ring-1 ring-inset ' + (state.phase === c[0] ? 'bg-indigo-600 text-white ring-indigo-600' : 'bg-white dark:bg-slate-900 ring-slate-300 dark:ring-slate-600') + '">' + c[1] + '</button>').join(' ');
+  const shown = PHASES.filter((p) => state.phase === 'all' || String(p.id) === state.phase);
+  const body = shown.map((p) => {
+    const st = phaseStats(p.id);
+    return '<section class="mt-6" aria-labelledby="ph-' + p.id + '"><div class="rounded-2xl border border-indigo-200 dark:border-indigo-900 bg-indigo-50 dark:bg-indigo-950/40 p-5">' +
+      '<div class="flex flex-wrap items-baseline justify-between gap-2"><h2 id="ph-' + p.id + '" class="text-xl font-extrabold">Phase ' + p.id + ' — ' + esc(p.name) + '</h2>' +
+      '<span class="text-sm tabular-nums" data-phase-stat="' + p.id + '">' + st.done + ' / ' + st.n + ' tasks · ' + fmtDays(st.daysDone) + ' / ' + fmtDays(st.days) + ' dev-days</span></div>' +
+      '<p class="mt-1 text-sm"><strong>Goal:</strong> ' + esc(p.goal) + '</p><p class="text-sm"><strong>Sequencing:</strong> ' + esc(p.order) + '</p>' +
+      '<div class="mt-3 h-2.5 rounded-full bg-white/70 dark:bg-slate-800"><div data-phase-bar="' + p.id + '" class="h-2.5 rounded-full bg-indigo-600 dark:bg-indigo-400" style="width:' + (st.n ? pct(st.done / st.n) : 0) + '%"></div></div></div>' +
+      '<div class="mt-3 space-y-3">' + TASKS.filter((t) => t.phase === p.id).map(taskHtml).join('') + '</div></section>';
+  }).join('');
+  $('#panel-roadmap').innerHTML =
+    '<div class="flex flex-wrap items-center justify-between gap-3"><div role="tablist" aria-label="Filter roadmap by phase" class="flex flex-wrap gap-2">' + chips + '</div>' +
+    '<div class="flex gap-2 text-sm"><button type="button" id="btn-export" class="underline">Copy progress JSON</button><button type="button" id="btn-reset" class="underline text-red-700 dark:text-red-300">Reset progress</button></div></div>' +
+    '<p class="mt-2 text-sm text-slate-600 dark:text-slate-400">Tick a task when it is merged <em>and its acceptance criterion passes</em>. Each finding’s progress, the module scores and the overall score update live. Progress is stored only in this browser.</p>' + body;
+  fillSnippets();
+}
+
+function fillSnippets() {
+  $$('[data-snip]').forEach((c) => { const s = SNIPPETS[c.getAttribute('data-snip')]; if (s) c.textContent = s.code; });
+}
+
+function updateProgressWidgets() {
+  PHASES.forEach((p) => {
+    const st = phaseStats(p.id);
+    const l = $('[data-phase-stat="' + p.id + '"]'); if (l) l.textContent = st.done + ' / ' + st.n + ' tasks · ' + fmtDays(st.daysDone) + ' / ' + fmtDays(st.days) + ' dev-days';
+    const b = $('[data-phase-bar="' + p.id + '"]'); if (b) b.style.width = (st.n ? pct(st.done / st.n) : 0) + '%';
+  });
+  renderOverview();
+  if ($('#f-body')) renderFindingsRows();
+  renderClaims();
+}
+
+/* ───────────── CLAIMS / FORMULAS ───────────── */
+const VERDICT = {
+  ok: ['bg-emerald-100 text-emerald-900 ring-emerald-300 dark:bg-emerald-950 dark:text-emerald-100 dark:ring-emerald-700', '✔ Correct'],
+  fix: ['bg-orange-100 text-orange-900 ring-orange-300 dark:bg-orange-950 dark:text-orange-100 dark:ring-orange-700', '◐ Needs fix'],
+  blocked: ['bg-fuchsia-100 text-fuchsia-900 ring-fuchsia-300 dark:bg-fuchsia-950 dark:text-fuchsia-100 dark:ring-fuchsia-700', '▨ No real input'],
+  missing: ['bg-red-100 text-red-900 ring-red-300 dark:bg-red-950 dark:text-red-100 dark:ring-red-700', '✖ Undefined'],
+};
+
+function renderClaims() {
+  const nov = NOVELTIES.map((n) => {
+    const b0 = novelty(n, false), n0 = novelty(n, true);
+    return '<tr><th scope="row" class="p-3 text-left font-normal align-top"><div class="font-mono text-xs font-bold">' + n.id + '</div><div class="font-semibold">' + esc(n.name) + '</div></th>' +
+      '<td class="p-3 align-top">' + esc(n.what) + '</td><td class="p-3 align-top">' + esc(n.risk) + '</td>' +
+      '<td class="p-3 align-top tabular-nums"><div class="text-lg font-bold">' + pct(n0) + '%</div><div class="text-xs text-slate-600 dark:text-slate-400">baseline ' + pct(b0) + '%</div></td>' +
+      '<td class="p-3 align-top">' + n.gaps.map((id) => '<button type="button" data-goto-gap="' + id + '" class="font-mono text-[11px] rounded px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 ring-1 ring-inset ring-slate-300 dark:ring-slate-600 mr-1 mb-1">' + id + '</button>').join('') + '</td></tr>';
+  }).join('');
+  const forms = FORMULAS.map((f) => '<tr><th scope="row" class="p-3 text-left align-top font-mono text-xs font-bold">' + esc(f.p) + '</th><td class="p-3 align-top text-xs sm:text-sm">' + esc(f.now) + '</td><td class="p-3 align-top whitespace-nowrap">' + badge(VERDICT[f.verdict][0], VERDICT[f.verdict][1]) + '</td><td class="p-3 align-top text-sm">' + esc(f.note) + '</td></tr>').join('');
+  $('#panel-claims').innerHTML =
+    '<section aria-labelledby="h-nov"><h2 id="h-nov" class="text-xl font-extrabold">Patent-critical novelties</h2>' +
+    '<p class="text-sm text-slate-600 dark:text-slate-400 mt-1 max-w-3xl">Readiness here is the average credit of the findings each novelty depends on — i.e. how close it is to being <em>demonstrably built and working</em>, which is what a filing needs to be able to show. Whether any of it is novel or non-obvious is for a prior-art search and a registered patent attorney.</p>' +
+    '<div class="mt-3 overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"><table class="w-full min-w-[900px] text-sm"><caption class="sr-only">Patent-critical novelties and their readiness</caption><thead class="bg-slate-100 dark:bg-slate-800 text-left text-xs uppercase tracking-wide"><tr><th scope="col" class="p-3">Novelty</th><th scope="col" class="p-3">What it is</th><th scope="col" class="p-3">Claim risk / status</th><th scope="col" class="p-3">Built</th><th scope="col" class="p-3">Depends on</th></tr></thead><tbody class="divide-y divide-slate-200 dark:divide-slate-700">' + nov + '</tbody></table></div></section>' +
+
+    '<section class="mt-8" aria-labelledby="h-form"><h2 id="h-form" class="text-xl font-extrabold">DASE formula sheet — audited</h2>' +
+    '<p class="text-sm text-slate-600 dark:text-slate-400 mt-1 max-w-3xl">Every parameter, its current definition in <code>dase_engine.py</code>, and whether it is correct, wrong, or fed nothing. Corrected implementations are in Roadmap tasks P3-06, P3-07 and P4-10.</p>' +
+    '<div class="mt-3 overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"><table class="w-full min-w-[900px] text-sm"><caption class="sr-only">DASE parameter definitions and audit verdicts</caption><thead class="bg-slate-100 dark:bg-slate-800 text-left text-xs uppercase tracking-wide"><tr><th scope="col" class="p-3">Parameter</th><th scope="col" class="p-3">Current definition</th><th scope="col" class="p-3">Verdict</th><th scope="col" class="p-3">Finding &amp; proposed fix</th></tr></thead><tbody class="divide-y divide-slate-200 dark:divide-slate-700">' + forms + '</tbody></table></div></section>' +
+
+    '<section class="mt-8 grid gap-6 lg:grid-cols-2" aria-labelledby="h-strat">' +
+      '<div class="rounded-2xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 p-6"><h2 id="h-strat" class="font-bold text-amber-900 dark:text-amber-100">Filing-strategy notes (engineering view — not legal advice)</h2><ul class="mt-2 list-disc ml-5 space-y-2 text-sm">' +
+        '<li><strong>Disclosure clock.</strong> <code>docs/PROJECT_EXPLANATION.md</code> and <code>PHASE_LEARNINGS.md</code> publish the full formulas and thresholds, and the CORS list references a hosted Vercel site. If the repo or site is public, that may already count as disclosure; many jurisdictions have no or a short grace period. Establish the facts <em>before</em> publishing anything else.</li>' +
+        '<li><strong>Reduction to practice.</strong> Claim only what runs. Voice-first navigation, visual summary, closed loop, dysgraphia and dyscalculia pipelines are currently un-built or unreachable; the DASE code has no dated commit.</li>' +
+        '<li><strong>Technical effect.</strong> Pure weighted-sum maths is exposed to “abstract idea / mathematical method” objections (e.g. US §101, India §3(k)). Frame independent claims around the pipeline: sensor/interaction capture → cause classification with abstention → profile-conditioned content adaptation / re-presentation.</li>' +
+        '<li><strong>Claim family.</strong> System + method + storage-medium claims for N2/N3; dependent claims per disability profile (weights, diagnostic-only rule, coverage); separate family for voice-first navigation (N4).</li>' +
+        '<li><strong>Prior-art search areas.</strong> response-time-effort / rapid-guessing detection in computer-based testing; item-response-theory and cognitive-diagnosis models; gaze/attention analytics in e-learning; accessibility-oriented voice UIs; LLM-based text simplification. The research doc’s “no system does X” statements are hypotheses to test.</li>' +
+        '<li><strong>Honesty statements travel with the claims:</strong> weights and thresholds are literature-informed, not empirically validated; focus is face-presence, not attention; VOICE_Q/NAV_EFF score the interface, not the learner.</li></ul></div>' +
+      '<div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-6"><h2 class="font-bold">Baseline features (not patent pillars)</h2><p class="text-sm mt-1 text-slate-600 dark:text-slate-400">Necessary, and worth doing, but do not carry novelty on their own: admin provisioning, first-login change, teacher scoping, skip links/landmarks, live regions, accessible charts, POS reader, TTS controls, Firestore rules, CORS/config hygiene. They still gate the score because a filing built on a product that leaks children’s data is a liability.</p>' +
+      '<h2 class="font-bold mt-4">Docs vs code reality check</h2><ul class="mt-1 list-disc ml-5 text-sm space-y-1"><li><code>implementation_plan.md</code> and <code>disability_research_compilation.md</code> are not in the repo; <code>docs/ROADMAP.md</code> and <code>docs/DISABILITY_RESEARCH.md</code> were used as their equivalents.</li><li>Named in docs, absent from every branch: <code>VoiceNavigator.tsx</code>, <code>speech.ts</code>, <code>voiceIntents.ts</code>, <code>useVoiceCommand.ts</code>, <code>VisualSummary.tsx</code>, <code>run_ablation.py</code>, <code>test_phase0–3.py</code>.</li><li>Staged but uncommitted: <code>dase_engine.py</code>, the four new routers, <code>dase_profiles.json</code>, Settings/Profile UI.</li></ul></div>' +
+    '</section>';
+}
+
+/* ───────────── METHOD ───────────── */
+function renderMethod() {
+  const modW = MODULES.map((m) => '<tr><th scope="row" class="py-1 pr-4 text-left font-medium">' + esc(m.name) + '</th><td class="tabular-nums">' + pct(m.weight) + '%</td><td class="pl-4 text-slate-600 dark:text-slate-400">' + GAPS.filter((g) => g.m === m.id).length + ' findings</td></tr>').join('');
+  $('#panel-method').innerHTML =
+    '<div class="max-w-3xl space-y-6 text-sm leading-relaxed">' +
+    '<section><h2 class="text-xl font-extrabold">How the readiness score is computed</h2>' +
+    '<p class="mt-2">Every finding carries a <strong>state</strong> of the <em>desired capability</em>, worth a fixed credit: <strong>verified working = 1.0</strong>, <strong>partial / flawed = 0.5</strong>, <strong>mocked / placeholder = 0.15</strong>, <strong>missing = 0</strong>. A finding’s weight is its severity (Critical 3, High 2, Medium 1).</p>' +
+    '<pre class="code" tabindex="0">module_readiness = Σ weight(g) · credit(g)  /  Σ weight(g)\ncredit(g)        = base(state) + (1 − base(state)) · (ticked fix-tasks / all fix-tasks for g)      // verified-working findings stay at 1.0\noverall          = Σ module_weight · module_readiness</pre>' +
+    '<table class="mt-3 text-sm"><caption class="sr-only">Module weights</caption><tbody>' + modW + '</tbody></table>' +
+    '<p class="mt-3">DASE carries the largest module weight (25 %) because the multi-dimensional score and cause-based classifier are the named core novelty; BVI voice is next (18 %). The weights are a judgement call — change <code>MODULES[].weight</code> in this file to re-weight.</p></section>' +
+    '<section><h2 class="text-lg font-bold">What “verified” means here</h2><ul class="list-disc ml-5 space-y-1.5">' +
+      '<li><strong>Executed:</strong> <code>dase_engine.py</code> was run directly — weight sums, dead-weight per profile, coverage for QuizPage-shaped events, classifier truth-table cases, CONSIST / LRN_VEL / ADJ_ACC edge cases, TIME_EFF construction.</li>' +
+      '<li><strong>Read, not run:</strong> all other backend routers/services and every frontend file were read line-by-line against <code>docs/</code>; nothing in the browser was executed, no screen reader was used, no Firestore was queried. Findings about UI behaviour are static-analysis conclusions.</li>' +
+      '<li><strong>Searched:</strong> git history, all local and remote branches, and the stash for the files the docs name; none had them.</li></ul></section>' +
+    '<section><h2 class="text-lg font-bold">Limits</h2><ul class="list-disc ml-5 space-y-1.5"><li>The score measures <em>engineering readiness to demonstrate the claims</em>, not patentability. Novelty, non-obviousness, eligibility and jurisdictional rules need a prior-art search and a registered patent attorney.</li>' +
+      '<li>Task effort figures are single-developer estimates (≈ ' + fmtDays(TASKS.reduce((a, t) => a + t.days, 0)) + ' dev-days in total) and exclude user studies, legal work and Firebase/Render/Vercel operations.</li>' +
+      '<li>Two stated exclusions from <code>docs/ROADMAP.md</code> — webcam-based anxiety inference and unlicensed sign-video embedding — are honoured here on purpose. The plan includes stress “detection” only as an interaction-based hesitation signal and a sign glossary only from school-owned clips. Bidirectional sign-language recognition is out of scope.</li>' +
+      '<li>Browsers block <code>speechSynthesis</code> and audio until a user gesture, so “speak the instant the site loads” cannot be literal in any browser. Phase 2 delivers the closest compliant behaviour: immediate screen-reader announcement plus audio on the first key/tap, remembered per device.</li></ul></section>' +
+    '</div>';
+}
+
+/* ───────────── NAV / EVENTS ───────────── */
+const TABS = ['overview', 'findings', 'roadmap', 'claims', 'method'];
+function showTab(id, focusPanel) {
+  state.tab = id;
+  TABS.forEach((t) => {
+    const btn = $('#tab-' + t), panel = $('#panel-' + t), on = t === id;
+    btn.setAttribute('aria-selected', on); btn.tabIndex = on ? 0 : -1;
+    btn.className = 'tab-btn ' + (on ? 'tab-on' : 'tab-off');
+    panel.hidden = !on;
+  });
+  if (focusPanel) { const p = $('#panel-' + id); p.setAttribute('tabindex', '-1'); p.focus({ preventScroll: true }); }
+}
+
+function gotoGap(id) {
+  const g = GAPS.find((x) => x.id === id); if (!g) return;
+  state.f = { m: '', sev: '', pat: '', st: '', q: id };
+  renderFindingsShell(); showTab('findings');
+  const row = $('#gap-' + id); if (row) { row.scrollIntoView({ block: 'center' }); row.classList.add('flash'); setTimeout(() => row.classList.remove('flash'), 1800); }
+}
+function gotoTask(id) {
+  const t = TASKS.find((x) => x.id === id); if (!t) return;
+  state.phase = String(t.phase); renderRoadmap(); showTab('roadmap');
+  const a = $('#task-' + id); if (a) { const d = $('details', a); if (d) d.open = true; a.scrollIntoView({ block: 'center' }); a.classList.add('flash'); setTimeout(() => a.classList.remove('flash'), 1800); }
+}
+
+function onClick(e) {
+  const t = e.target.closest('button, input');
+  if (!t) return;
+  if (t.dataset.gotoGap) return gotoGap(t.dataset.gotoGap);
+  if (t.dataset.gotoTask) return gotoTask(t.dataset.gotoTask);
+  if (t.dataset.gotoModule) { state.f = { m: t.dataset.gotoModule, sev: '', pat: '', st: '', q: '' }; renderFindingsShell(); showTab('findings', true); return; }
+  if (t.dataset.phase) { state.phase = t.dataset.phase; renderRoadmap(); return; }
+  if (t.dataset.copy) {
+    const txt = SNIPPETS[t.dataset.copy].code;
+    const done = () => { t.textContent = 'Copied'; setTimeout(() => { t.textContent = 'Copy'; }, 1500); };
+    try { navigator.clipboard.writeText(txt).then(done, () => {}); } catch (err) { /* clipboard unavailable */ }
+    return;
+  }
+  if (t.id === 'f-reset') { state.f = { m: '', sev: '', pat: '', st: '', q: '' }; renderFindingsShell(); return; }
+  if (t.id === 'btn-reset') { if (confirm('Clear all ticked tasks in this browser?')) { state.done = {}; saveState(); renderRoadmap(); updateProgressWidgets(); } return; }
+  if (t.id === 'btn-export') {
+    const txt = JSON.stringify({ done: Object.keys(state.done).filter((k) => state.done[k]), overall: pct(overall(true)) }, null, 2);
+    try { navigator.clipboard.writeText(txt).then(() => { t.textContent = 'Copied'; setTimeout(() => { t.textContent = 'Copy progress JSON'; }, 1500); }); } catch (err) { /* ignore */ }
+  }
+}
+
+function onChange(e) {
+  const t = e.target;
+  if (t.dataset && t.dataset.task) {
+    state.done[t.dataset.task] = t.checked; saveState();
+    const card = $('#task-' + t.dataset.task);
+    if (card) {
+      card.classList.toggle('border-emerald-400', t.checked); card.classList.toggle('dark:border-emerald-700', t.checked);
+      card.classList.toggle('border-slate-200', !t.checked); card.classList.toggle('dark:border-slate-700', !t.checked);
+    }
+    updateProgressWidgets();
+    return;
+  }
+  const map = { 'f-m': 'm', 'f-sev': 'sev', 'f-pat': 'pat', 'f-st': 'st' };
+  if (map[t.id]) { state.f[map[t.id]] = t.value; renderFindingsRows(); }
+}
+function onInput(e) { if (e.target.id === 'f-q') { state.f.q = e.target.value; renderFindingsRows(); } }
+
+function onTabKey(e) {
+  const i = TABS.indexOf(state.tab);
+  let n = -1;
+  if (e.key === 'ArrowRight') n = (i + 1) % TABS.length;
+  else if (e.key === 'ArrowLeft') n = (i - 1 + TABS.length) % TABS.length;
+  else if (e.key === 'Home') n = 0; else if (e.key === 'End') n = TABS.length - 1;
+  if (n >= 0) { e.preventDefault(); showTab(TABS[n]); $('#tab-' + TABS[n]).focus(); }
+}
+
+function initTheme() {
+  let dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  try { const s = localStorage.getItem('eduease.plan.theme'); if (s) dark = s === 'dark'; } catch (e) { /* ignore */ }
+  const apply = () => { document.documentElement.classList.toggle('dark', dark); $('#theme').setAttribute('aria-pressed', dark); $('#theme').textContent = dark ? '☀ Light' : '☾ Dark'; };
+  apply();
+  $('#theme').addEventListener('click', () => { dark = !dark; apply(); try { localStorage.setItem('eduease.plan.theme', dark ? 'dark' : 'light'); } catch (e) { /* ignore */ } });
+}
+
+function init() {
+  loadState(); initTheme();
+  $('#meta-counts').textContent = GAPS.length + ' findings · ' + TASKS.length + ' tasks · ' + PHASES.length + ' phases';
+  renderOverview(); renderFindingsShell(); renderRoadmap(); renderClaims(); renderMethod();
+  TABS.forEach((t) => { $('#tab-' + t).addEventListener('click', () => showTab(t)); });
+  $('#tablist').addEventListener('keydown', onTabKey);
+  document.addEventListener('click', onClick);
+  document.addEventListener('change', onChange);
+  document.addEventListener('input', onInput);
+  const fromHash = () => {
+    const h = location.hash.replace('#', '');
+    if (TABS.indexOf(h) !== -1) showTab(h);
+    else if (h.indexOf('task-') === 0) gotoTask(h.slice(5));
+    else if (h.indexOf('gap-') === 0) gotoGap(h.slice(4));
+  };
+  window.addEventListener('hashchange', fromHash);
+  showTab('overview'); fromHash();
+}
+document.addEventListener('DOMContentLoaded', init);
+
+</script>
+</body>
+</html>
