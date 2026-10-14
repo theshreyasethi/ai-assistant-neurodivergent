@@ -41,6 +41,16 @@ const VoiceNavigator: React.FC = () => {
       switch (intent.intent) {
         case STOP:
           stopSpeaking();
+          // Also dispatched onto the bus (additive — stopSpeaking() above is
+          // unchanged and always still runs) so a page with its own
+          // play/pause state (LearningPage) can sync it to "paused" too.
+          // Previously only this function's own module-level TTS actually
+          // stopped; a page's `isPlaying` React state had no way to find
+          // out, so its Play/Pause button stayed stuck showing "Pause" and
+          // a later PLAY command (setIsPlaying(true) on an already-true
+          // state) was a no-op — reading could only resume after a reload
+          // reset the component's state entirely.
+          dispatchVoiceIntent(intent);
           return null;
         case NAVIGATE: {
           const path = (intent.slots.path as string) || '/student-dashboard';

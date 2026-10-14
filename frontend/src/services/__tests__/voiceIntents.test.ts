@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  ANSWER, EXIT_QUIZ, HELP, matchRules, NAVIGATE, PROGRESS, REPEAT, SKIP_QUESTION, STOP, SUBMIT, UNKNOWN,
+  ANSWER, EXIT_QUIZ, HELP, matchRules, NAVIGATE, PLAY, PROGRESS, READ_ALL, REPEAT, SET_WPM, SKIP_QUESTION, STOP,
+  SUBMIT, UNKNOWN,
 } from '../voiceIntents';
 
 describe('voiceIntents.matchRules', () => {
@@ -38,6 +39,52 @@ describe('voiceIntents.matchRules', () => {
   it('matches SUBMIT phrasings', () => {
     expect(matchRules('submit')?.intent).toBe(SUBMIT);
     expect(matchRules("that's my answer")?.intent).toBe(SUBMIT);
+  });
+
+  it('matches PLAY/resume phrasings', () => {
+    expect(matchRules('play')?.intent).toBe(PLAY);
+    expect(matchRules('resume')?.intent).toBe(PLAY);
+    expect(matchRules('resume reading')?.intent).toBe(PLAY);
+  });
+
+  it('"pause" still means STOP, unchanged — PLAY is a separate, new command', () => {
+    expect(matchRules('pause')?.intent).toBe(STOP);
+    expect(matchRules('stop')?.intent).toBe(STOP);
+  });
+
+  it('"start reading" still means READ_ALL, unchanged by the new NAVIGATE phrases', () => {
+    expect(matchRules('start reading')?.intent).toBe(READ_ALL);
+  });
+
+  describe('SET_WPM', () => {
+    const cases: Array<[string, number]> = [
+      ['make wpm 200', 200],
+      ['set reading speed to 250', 250],
+      ['change wpm to 150', 150],
+      ['200 wpm', 200],
+    ];
+    it.each(cases)('%s -> %i wpm', (text, expected) => {
+      const result = matchRules(text);
+      expect(result?.intent).toBe(SET_WPM);
+      expect(result?.slots.wpm).toBe(expected);
+    });
+  });
+
+  describe('new NAVIGATE phrasings', () => {
+    it('"upload pdf" navigates to upload', () => {
+      const result = matchRules('upload pdf');
+      expect(result?.intent).toBe(NAVIGATE);
+      expect(result?.slots.target).toBe('upload');
+    });
+    it('"manage content" navigates to content', () => {
+      const result = matchRules('manage content');
+      expect(result?.intent).toBe(NAVIGATE);
+      expect(result?.slots.target).toBe('content');
+    });
+    it('"start learning" / "begin learning" navigate to learning', () => {
+      expect(matchRules('start learning')?.slots.target).toBe('learning');
+      expect(matchRules('begin learning')?.slots.target).toBe('learning');
+    });
   });
 
   describe('ANSWER — 10+ phrasings, each resolving to the right option index', () => {

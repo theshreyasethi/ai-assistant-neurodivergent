@@ -146,10 +146,15 @@ const QuizPage: React.FC = () => {
   // what tells this hook a fresh question actually started.
   const qt = useQuestionTelemetry(`${currentIndex}:${currentQuestion?.attempts ?? 1}`);
 
-  // Announce + earcon on every new question, for voice-first students.
+  // Announce + earcon on every new question, for voice-first students — and
+  // ALWAYS for blind/low-vision profiles regardless of the voiceFirst
+  // toggle, since a blind student has no way to turn that toggle on
+  // without sight in the first place (same override LearningPage and
+  // AccessibleNotification.tsx already apply).
+  const isBlindOrLowVision = profile.disabilities.some((d) => d === 'blind' || d === 'low_vision');
   useEffect(() => {
     if (!currentQuestion || loading || isQuizCompleted) return;
-    if (profile.prefs.voiceFirst) {
+    if (profile.prefs.voiceFirst || isBlindOrLowVision) {
       earcon.question();
       const optionsLine =
         qType === "fill_blank" && !showFillBlankOptions

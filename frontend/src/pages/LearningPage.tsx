@@ -258,9 +258,20 @@ const LearningPage: React.FC = () => {
   }, []);
 
   // Auto-start when the student has voice-first or "read aloud
-  // automatically" on, once content is actually ready.
+  // automatically" on, once content is actually ready. Blind/low-vision
+  // profiles ALSO auto-start regardless of those two toggles — a blind
+  // student has no reliable way to find and press the Play button to turn
+  // this on in the first place (and may never have visited Settings, which
+  // itself needs sight to use), so waiting for an explicit opt-in here
+  // means the lesson never speaks at all. Mirrors the same disability-based
+  // override AccessibleNotification.tsx already applies to toast speech.
+  const isBlindOrLowVision = profile.disabilities.some((d) => d === 'blind' || d === 'low_vision');
   React.useEffect(() => {
-    if (simplifiedText && !profileLoading && (profile.prefs.voiceFirst || profile.prefs.ttsEnabled) && !resumed) {
+    if (
+      simplifiedText && !profileLoading &&
+      (profile.prefs.voiceFirst || profile.prefs.ttsEnabled || isBlindOrLowVision) &&
+      !resumed
+    ) {
       setIsPlaying(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -355,10 +366,29 @@ const LearningPage: React.FC = () => {
   useVoiceCommand('PROGRESS', announceNow);
   useVoiceCommand('FASTER', () => void savePrefs({ ttsRate: Math.min(2, (profile.prefs.ttsRate || 1) + 0.1) }));
   useVoiceCommand('SLOWER', () => void savePrefs({ ttsRate: Math.max(0.5, (profile.prefs.ttsRate || 1) - 0.1) }));
+  // "make wpm 200" / "set reading speed to 250" — same WPM = ttsRate*200
+  // convention as the WPM slider above, clamped to the same 0.5-2 range
+  // FASTER/SLOWER already enforce.
+  useVoiceCommand('SET_WPM', (intent) => {
+    const wpm = intent.slots.wpm as number;
+    void savePrefs({ ttsRate: Math.max(0.5, Math.min(2, wpm / 200)) });
+  });
   useVoiceCommand('EXPLAIN', () => {
     setChatSeed(`Please explain this in simpler words: "${queue[currentSentenceIndex]?.text ?? ''}"`);
     setChatOpen(true);
   });
+  // STOP (which also covers "pause" — see services/intent.py) is handled
+  // globally by VoiceNavigator for the actual stopSpeaking() call, but only
+  // this page knows it owns an `isPlaying` toggle that needs to follow —
+  // without this, the Play/Pause button stayed stuck on "Pause" after
+  // saying "stop"/"pause", and PLAY below (setIsPlaying(true) on an
+  // already-true state) would have been a no-op.
+  useVoiceCommand('STOP', () => {
+    if (isPlaying) pauseCountRef.current += 1;
+    setIsPlaying(false);
+  });
+  // Resumes from currentSentenceIndex, which STOP/pause never reset.
+  useVoiceCommand('PLAY', () => setIsPlaying(true));
 
   const navigateToQuiz = useCallback(() => {
     if (simplifiedText) navigate('/quiz', { state: { text: simplifiedText } });

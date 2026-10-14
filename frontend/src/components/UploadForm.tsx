@@ -33,6 +33,22 @@ const UploadForm: React.FC = () => {
     formData.append('describeImages', String(profile.prefs.describeImages));
     try {
       const response = await api.post('/upload-pdf/', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+
+      // /upload-pdf/ only EXTRACTS text — it never wrote to the `content`
+      // collection, so anything uploaded from this page (as opposed to the
+      // Manage Content page's ContentForm, which does call this) never
+      // showed up on /content's library list. Persisting here too, same as
+      // ContentForm does, so a PDF uploaded from either entry point shows
+      // up reliably. Best-effort: a save failure must not block the
+      // student from reading the lesson they just uploaded.
+      try {
+        const addFormData = new FormData();
+        addFormData.append('text', response.data.text);
+        await api.post('/add-content/', addFormData);
+      } catch (saveErr) {
+        console.warn('[upload] could not save to content library', saveErr);
+      }
+
       navigate('/learning', {
         state: {
           text: response.data.text,

@@ -34,6 +34,8 @@ ANSWER = "ANSWER"
 SUBMIT = "SUBMIT"
 SKIP_QUESTION = "SKIP_QUESTION"
 EXIT_QUIZ = "EXIT_QUIZ"
+PLAY = "PLAY"
+SET_WPM = "SET_WPM"
 UNKNOWN = "UNKNOWN"
 
 ROUTES = {
@@ -116,6 +118,13 @@ _RULES: List[tuple] = [
     (SKIP_QUESTION, re.compile(
         r"\bskip\b(\s+(this|that|the)\s+question)?|\bpass\b\s+(this|on this)\s+question\b")),
     (EXIT_QUIZ, re.compile(r"\b(exit|quit|leave)\b(\s+(this|the))?\s*quiz\b|\b(exit|quit)\b")),
+
+    # Resume reading from wherever it was paused/stopped — deliberately NOT
+    # "continue"/"carry on" (those are already READ_NEXT, advancing a
+    # sentence) and deliberately NOT reusing STOP's "pause" word (STOP must
+    # stay exactly as-is). The page itself (LearningPage) is what actually
+    # knows "wherever it was" by keeping currentSentenceIndex untouched.
+    (PLAY, re.compile(r"\b(play|resume( reading)?|unpause|keep playing)\b")),
 ]
 
 # "go to X" / "open X" / "take me to X"
@@ -133,6 +142,29 @@ _NAV_TARGETS = {
     "content": "content", "material": "content", "materials": "content",
     "teacher": "teacher",
 }
+
+# Fixed multi-word phrases that don't fit the "<verb> ... <target>" cross
+# product above. They're matched as whole phrases, deliberately NOT by
+# adding their lead word ("upload", "manage", "start", "begin") to _NAV_RE's
+# shared verb group — "start"/"begin" paired with EVERY existing target
+# would also pair with "read"/"reading", and "start reading" is already
+# READ_ALL's own phrase (_RULES below). Checked at the same priority as
+# _NAV_RE, before the generic _RULES loop.
+def _direct_nav_target(cleaned: str) -> Optional[str]:
+    if re.search(r"\bupload (?:a |my |the )?pdf\b|\bupload file\b", cleaned):
+        return "upload"
+    if re.search(r"\bmanage content\b", cleaned):
+        return "content"
+    if re.search(r"\b(?:start|begin) (?:my |the )?(?:learning|lesson|lessons)\b", cleaned):
+        return "learning"
+    return None
+
+
+# "make wpm 200" / "set reading speed to 250" / "change wpm to 150" / "200 wpm"
+_WPM_RE = re.compile(
+    r"\b(?:wpm|reading speed)\b(?:\s*(?:to|at|of))?\s*(\d{2,3})\b"
+    r"|\b(\d{2,3})\s*wpm\b"
+)
 
 # "answer B" / "choose the second one" / "select option 3" / "answer true"
 _ANSWER_RE = re.compile(
@@ -173,6 +205,22 @@ def match_rules(text: str) -> Optional[Intent]:
                 NAVIGATE, {"target": target, "path": ROUTES[target]}, 0.95, "rules"
             )
 
+    direct_target = _direct_nav_target(cleaned)
+    if direct_target:
+        return Intent(
+            NAVIGATE, {"target": direct_target, "path": ROUTES[direct_target]}, 0.95, "rules"
+        )
+
+    wpm_match = _WPM_RE.search(cleaned)
+    if wpm_match:
+        wpm_str = wpm_match.group(1) or wpm_match.group(2)
+        try:
+            wpm = int(wpm_str)
+        except (TypeError, ValueError):
+            wpm = None
+        if wpm is not None and 50 <= wpm <= 500:
+            return Intent(SET_WPM, {"wpm": wpm}, 0.95, "rules")
+
     for name, pattern in _RULES:
         if pattern.search(cleaned):
             return Intent(name, {}, 0.9, "rules")
@@ -186,12 +234,15 @@ def match_rules(text: str) -> Optional[Intent]:
 
 
 HELP_TEXT = (
-    "You can say: go to my quizzes, go to my lessons, or go to my dashboard. "
-    "While reading, say read next, read previous, repeat, or read everything. "
+    "You can say: go to my quizzes, go to my lessons, go to my dashboard, "
+    "upload a pdf, or manage content. "
+    "While reading, say read next, read previous, repeat, read everything, "
+    "play or resume, or pause. "
+    "Say make my reading speed 200 WPM to set an exact reading speed, or say "
+    "faster or slower to nudge it. "
     "Say explain this if something is unclear, or what is on this page to hear a description. "
     "In a quiz, say answer A, answer B, answer C or answer D, or true or false, then say submit. "
     "Say skip this question to move on without answering, or exit quiz to leave the quiz. "
-    "Say faster or slower to change the reading speed. "
     "Say stop at any time to make me quiet."
 )
 
@@ -201,10 +252,11 @@ Reply with ONLY a JSON object: {{"intent": "...", "slots": {{}}}}
 
 Valid intents: {NAVIGATE}, {READ_NEXT}, {READ_PREVIOUS}, {READ_ALL}, {REPEAT}, {STOP},
 {DESCRIBE_PAGE}, {EXPLAIN}, {PROGRESS}, {HELP}, {FASTER}, {SLOWER}, {ANSWER}, {SUBMIT},
-{SKIP_QUESTION}, {EXIT_QUIZ}, {UNKNOWN}
+{SKIP_QUESTION}, {EXIT_QUIZ}, {PLAY}, {SET_WPM}, {UNKNOWN}
 
 For {NAVIGATE}, slots must be {{"target": one of dashboard|quiz|learning|upload|content|teacher}}.
 For {ANSWER}, slots must be {{"optionIndex": 0|1|2|3}}.
+For {SET_WPM}, slots must be {{"wpm": an integer between 50 and 500}}.
 All other intents take empty slots.
 
 The input is speech-to-text output, so expect mis-recognition. If you cannot tell what
@@ -242,6 +294,14 @@ def classify(text: str, allow_llm: bool = True) -> Intent:
             if not 0 <= idx <= 3:
                 return Intent(UNKNOWN, {}, 0.0, "llm")
             slots = {"optionIndex": idx}
+        elif name == SET_WPM:
+            try:
+                wpm = int(slots.get("wpm", -1))
+            except (TypeError, ValueError):
+                return Intent(UNKNOWN, {}, 0.0, "llm")
+            if not 50 <= wpm <= 500:
+                return Intent(UNKNOWN, {}, 0.0, "llm")
+            slots = {"wpm": wpm}
         else:
             slots = {}
 

@@ -30,6 +30,8 @@ export const ANSWER = 'ANSWER';
 export const SUBMIT = 'SUBMIT';
 export const SKIP_QUESTION = 'SKIP_QUESTION';
 export const EXIT_QUIZ = 'EXIT_QUIZ';
+export const PLAY = 'PLAY';
+export const SET_WPM = 'SET_WPM';
 export const UNKNOWN = 'UNKNOWN';
 
 export const ROUTES: Record<string, string> = {
@@ -76,6 +78,11 @@ const RULES: Array<[string, RegExp]> = [
   // these are the only route to either action (same reasoning as ANSWER).
   [SKIP_QUESTION, /\bskip\b(\s+(this|that|the)\s+question)?|\bpass\b\s+(this|on this)\s+question\b/],
   [EXIT_QUIZ, /\b(exit|quit|leave)\b(\s+(this|the))?\s*quiz\b|\b(exit|quit)\b/],
+  // Resume reading from wherever it was paused/stopped — deliberately NOT
+  // "continue"/"carry on" (already READ_NEXT) and deliberately NOT STOP's
+  // "pause" word (STOP stays exactly as-is). The page itself (LearningPage)
+  // knows "wherever it was" by leaving currentSentenceIndex untouched.
+  [PLAY, /\b(play|resume( reading)?|unpause|keep playing)\b/],
 ];
 
 // "go to X" / "open X" / "take me to X"
@@ -89,6 +96,23 @@ const NAV_TARGETS: Record<string, string> = {
   content: 'content', material: 'content', materials: 'content',
   teacher: 'teacher',
 };
+
+// Fixed multi-word phrases that don't fit the "<verb> ... <target>" cross
+// product above. Matched as whole phrases, deliberately NOT by adding their
+// lead word ("upload", "manage", "start", "begin") to NAV_RE's shared verb
+// group — "start"/"begin" paired with EVERY existing target would also
+// pair with "read"/"reading", and "start reading" is already READ_ALL's
+// own phrase (RULES above). Checked at the same priority as NAV_RE, before
+// the generic RULES loop.
+function directNavTarget(cleaned: string): string | null {
+  if (/\bupload (?:a |my |the )?pdf\b|\bupload file\b/.test(cleaned)) return 'upload';
+  if (/\bmanage content\b/.test(cleaned)) return 'content';
+  if (/\b(?:start|begin) (?:my |the )?(?:learning|lesson|lessons)\b/.test(cleaned)) return 'learning';
+  return null;
+}
+
+// "make wpm 200" / "set reading speed to 250" / "change wpm to 150" / "200 wpm"
+const WPM_RE = /\b(?:wpm|reading speed)\b(?:\s*(?:to|at|of))?\s*(\d{2,3})\b|\b(\d{2,3})\s*wpm\b/;
 
 // "answer B" / "choose the second one" / "select option 3" / "answer true"
 const ANSWER_RE = /\b(answer|choose|select|pick|option|number)\b\s*(?:is\s+|the\s+)?(?:option\s+|number\s+)?\b([abcd]|first|second|third|fourth|one|two|three|four|[1-4]|true|false)\b/;
@@ -123,6 +147,19 @@ export function matchRules(text: string): Intent | null {
     }
   }
 
+  const directTarget = directNavTarget(cleaned);
+  if (directTarget) {
+    return { intent: NAVIGATE, slots: { target: directTarget, path: ROUTES[directTarget] }, confidence: 0.95, source: 'rules' };
+  }
+
+  const wpmMatch = cleaned.match(WPM_RE);
+  if (wpmMatch) {
+    const wpm = Number(wpmMatch[1] ?? wpmMatch[2]);
+    if (Number.isFinite(wpm) && wpm >= 50 && wpm <= 500) {
+      return { intent: SET_WPM, slots: { wpm }, confidence: 0.95, source: 'rules' };
+    }
+  }
+
   for (const [name, pattern] of RULES) {
     if (pattern.test(cleaned)) return { intent: name, slots: {}, confidence: 0.9, source: 'rules' };
   }
@@ -137,10 +174,13 @@ export function matchRules(text: string): Intent | null {
 }
 
 export const HELP_TEXT =
-  'You can say: go to my quizzes, go to my lessons, or go to my dashboard. ' +
-  'While reading, say read next, read previous, repeat, or read everything. ' +
+  'You can say: go to my quizzes, go to my lessons, go to my dashboard, ' +
+  'upload a pdf, or manage content. ' +
+  'While reading, say read next, read previous, repeat, read everything, ' +
+  'play or resume, or pause. ' +
+  'Say make my reading speed 200 WPM to set an exact reading speed, or say ' +
+  'faster or slower to nudge it. ' +
   "Say explain this if something is unclear, or what is on this page to hear a description. " +
   'In a quiz, say answer A, answer B, answer C or answer D, or true or false, then say submit. ' +
   'Say skip this question to move on without answering, or exit quiz to leave the quiz. ' +
-  'Say faster or slower to change the reading speed. ' +
   'Say stop at any time to make me quiet.';

@@ -41,17 +41,47 @@ export function listenOnce(lang?: string): Promise<SttResult> {
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
 
+    // Real, observed Web Speech API flakiness: a session can end without
+    // ever firing onresult, onerror OR onnomatch (a dropped/aborted stream,
+    // the tab losing focus mid-recognition, a permission prompt dismissed
+    // without a decision, ...). Before this, that left the returned Promise
+    // permanently unsettled — which left VoiceNavigator's `listening` state
+    // stuck `true` forever, since nothing ever ran `.finally()`. Every
+    // later Ctrl+Shift+V press then silently no-opped (`if (listening)
+    // return`) until a full page reload reset React state — this is what
+    // "voice command listening intermittently stops working" was.
+    // onend fires after recognition stops for ANY reason, which makes it
+    // the one callback guaranteed to settle this; the timeout below is a
+    // last-resort net in case onend itself is what gets dropped.
+    let settled = false;
+    const settle = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(watchdog);
+      fn();
+    };
+
     recognition.onresult = (e: any) => {
       const result = e?.results?.[0]?.[0];
-      resolve({ transcript: result?.transcript ?? '', confidence: result?.confidence ?? 0 });
+      settle(() => resolve({ transcript: result?.transcript ?? '', confidence: result?.confidence ?? 0 }));
     };
-    recognition.onerror = (e: any) => reject(new Error(e?.error || 'recognition-error'));
-    recognition.onnomatch = () => reject(new Error('nomatch'));
+    recognition.onerror = (e: any) => settle(() => reject(new Error(e?.error || 'recognition-error')));
+    recognition.onnomatch = () => settle(() => reject(new Error('nomatch')));
+    recognition.onend = () => settle(() => reject(new Error('no-result')));
+
+    const watchdog = setTimeout(() => {
+      try {
+        recognition.abort();
+      } catch {
+        /* already stopped */
+      }
+      settle(() => reject(new Error('timeout')));
+    }, 12000);
 
     try {
       recognition.start();
     } catch (err) {
-      reject(err instanceof Error ? err : new Error('recognition-start-failed'));
+      settle(() => reject(err instanceof Error ? err : new Error('recognition-start-failed')));
     }
   });
 }
