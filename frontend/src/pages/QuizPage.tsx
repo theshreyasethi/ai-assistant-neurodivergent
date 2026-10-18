@@ -180,6 +180,12 @@ const QuizPage: React.FC = () => {
     if (!userAnswer) return;
 
     const currentQ = questions[currentIndex];
+    // G10: stem + options word count, so the backend classifier can
+    // discount a long item's unavoidable extra reading time before judging
+    // hesitation (dase_engine.classify_error).
+    const itemWordCount =
+      (currentQ.question.trim().split(/\s+/).filter(Boolean).length) +
+      currentQ.options.reduce((sum, o) => sum + o.trim().split(/\s+/).filter(Boolean).length, 0);
     const isFreeText = currentQ.question_type === "fill_blank" && !showFillBlankOptions;
     const usesFuzzyMatch = isFreeText && profile.disabilities.some((d) => FUZZY_MATCH_PROFILES.has(d));
     const isCorrect = isFreeText
@@ -210,6 +216,7 @@ const QuizPage: React.FC = () => {
           reRead: sig.reRead,
           timedOut: false,
           hasSimplerVariant: !!currentQ.simplerQuestion,
+          itemWordCount,
         });
         classification = data.classification;
         shouldRepresent = !!data.shouldRepresent;
@@ -238,6 +245,7 @@ const QuizPage: React.FC = () => {
         difficulty: currentQ.difficulty ?? 3,
         questionType: currentQ.question_type ?? "mcq",
         itemKind: currentQ.itemKind ?? null,
+        itemWordCount,
         selected: userAnswer,
         correct: isCorrect,
         timeMs: sig.timeMs,

@@ -12,11 +12,16 @@ export interface DaseEvaluation {
   parameters: Record<string, number>;
   diagnosticOnly: Record<string, number>;
   missingParameters: string[];
+  /** 95% Wilson interval per proportion-shaped parameter (ACC/COMP/PATTERN/
+   * TASK_COMP) — absent for parameters that aren't a simple proportion, and
+   * absent entirely on an evaluation computed before U8. */
+  parameterIntervals?: Record<string, [number, number]>;
 }
 
 const PARAM_LABEL: Record<string, string> = {
   ACC: 'Accuracy', ADJ_ACC: 'Adjusted accuracy', COMP: 'Comprehension', TIME_EFF: 'Time efficiency',
-  ATT_SPAN: 'Face presence', CONSIST: 'Consistency', EFFORT: 'Effort', LRN_VEL: 'Learning velocity',
+  ATT_SPAN: 'Face presence', PACE_STAB: 'Pace stability', ACC_STAB: 'Accuracy stability',
+  EFFORT: 'Effort', LRN_VEL: 'Learning velocity',
   TASK_COMP: 'Task completion', READ_FL: 'Reading fluency', VOICE_Q: 'Voice quality',
   NAV_EFF: 'Navigation efficiency', PATTERN: 'Pattern recognition', RESIL: 'Resilience',
   VIS_ENG: 'Visual engagement', KNOW: 'Knowledge', EXPR: 'Written expression',
@@ -67,17 +72,24 @@ const DaseRadar: React.FC<Props> = ({ latest }) => {
             <tr>
               <th scope="col" className="text-left px-3 py-2 font-heading text-xs uppercase text-on-surface-variant">Parameter</th>
               <th scope="col" className="text-left px-3 py-2 font-heading text-xs uppercase text-on-surface-variant">Value</th>
+              <th scope="col" className="text-left px-3 py-2 font-heading text-xs uppercase text-on-surface-variant">95% CI</th>
               <th scope="col" className="text-left px-3 py-2 font-heading text-xs uppercase text-on-surface-variant">Used in score?</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
-              <tr key={r.key} className="border-t border-outline-variant/30">
-                <th scope="row" className="text-left px-3 py-2 font-body font-normal">{r.label}</th>
-                <td className="px-3 py-2">{r.value.toFixed(2)}</td>
-                <td className="px-3 py-2">{r.diagnostic ? 'No — reported only' : 'Yes'}</td>
-              </tr>
-            ))}
+            {rows.map((r) => {
+              const interval = latest.parameterIntervals?.[r.key];
+              return (
+                <tr key={r.key} className="border-t border-outline-variant/30">
+                  <th scope="row" className="text-left px-3 py-2 font-body font-normal">{r.label}</th>
+                  <td className="px-3 py-2">{r.value.toFixed(2)}</td>
+                  <td className="px-3 py-2 text-on-surface-variant">
+                    {interval ? `${interval[0].toFixed(2)}–${interval[1].toFixed(2)}` : '—'}
+                  </td>
+                  <td className="px-3 py-2">{r.diagnostic ? 'No — reported only' : 'Yes'}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       }

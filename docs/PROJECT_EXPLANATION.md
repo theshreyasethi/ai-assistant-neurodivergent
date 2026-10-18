@@ -270,12 +270,22 @@ simpler variant when the label is `COMPREHENSION_BARRIER` **and** confidence
 — re-presenting a `KNOWLEDGE_GAP` in easier words would just show the student
 a question they still can't answer, teaching nothing and wasting time.
 
+**Item-length normalization (G10):** every timing ratio above is computed
+against an *adjusted* response time, not the raw one — `classify_error`
+subtracts an estimated reading-time floor (`itemWordCount × 300ms`, a
+literature-informed, unvalidated ~200wpm estimate) from `time_ms` first. A
+long question stem simply takes longer to read regardless of hesitation or
+attention; without this, a long item could read as a processing delay, an
+attention lapse, or a comprehension barrier purely because reading it took a
+while. `itemWordCount` defaults to 0 (no adjustment) for events recorded
+before this field existed.
+
 ### 4.6 DASE — the Disability-Adaptive Scoring Engine
 
 This is the core scoring system: a student's quiz/session telemetry becomes
-**ten separate 0–1 parameters** (never one blended grade), which are then
-combined into one composite score using **weights that differ by declared
-disability** — the same measurements, read through a different lens.
+**eighteen separate 0–1 parameters** (never one blended grade), which are
+then combined into one composite score using **weights that differ by
+declared disability** — the same measurements, read through a different lens.
 
 #### Layer 1 — parameters (`compute_parameters()`)
 
@@ -289,51 +299,56 @@ never look like a zero score).
 | `ADJ_ACC` | `(sum of 1.0 per correct answer + 0.75 x confidence per attention-lapse-classified wrong answer) ÷ total answered` | At least one classified wrong answer |
 | `COMP` | correct ÷ answered, restricted to items with `difficulty >= 3` | ≥3 "hard" items answered |
 | `TIME_EFF` | mean of `min(personalMedianTime / timeMs, 1.0)` across answers | ≥3 timed answers, a personal median |
-| `ATT_SPAN` | mean face-presence ratio across answers | ≥5 focus samples per answer (webcam consent) |
-| `CONSIST` | `1 − 4 x mean(population variance of correctness within each difficulty band)` | ≥2 answers in at least one difficulty band |
+| `ATT_SPAN` | mean face-presence ratio across answers | ≥5 focus samples per answer (webcam consent). **Never computed for `autism`** — `webcamAllowed()` excludes autism from the webcam focus tracker entirely (same as blind/low-vision, for a different reason: atypical eye contact is a feature of autism, not disengagement), and `autism` never declares this weight anyway |
+| `PACE_STAB` | `1 − coefficient of variation of response time across correct answers` — pace reliability, independent of accuracy level | ≥4 timed correct answers. **`diagnosticOnly` for `adhd` and `autism`** — response-time variability is itself a symptom of both conditions, not a measure of unreliable performance |
+| `ACC_STAB` | `1 − normalized variance of correctness across recent sessions` — accuracy reliability, independent of accuracy level. Split from a single combined `CONSIST` parameter so pace and accuracy stability could be excluded independently per profile | ≥3 prior sessions. Never diagnostic-only for any profile |
 | `EFFORT` | mean of a per-answer engagement score: `+0.3` if the student changed their answer, `+0.2` if they re-read the question, `+0.2` if they revisited it, `+0.3` if they spent ≥ half their personal median time (capped at 1.0) | Any answered questions |
 | `LRN_VEL` | `0.5 + (secondHalfAccuracy − firstHalfAccuracy) / 2` — maps an improvement delta of [−1, 1] onto [0, 1], where 0.5 means no change | ≥6 answered questions (needs two meaningful halves) |
 | `TASK_COMP` | completed sessions ÷ started sessions | Session-completion data |
 | `READ_FL` | mean words-per-minute across reading events, ÷ 200 (a 200-wpm reference pace), capped at 1.0 | Reading events with ≥20 words read and >1s elapsed |
 | `VOICE_Q` | `0.6 x (fraction of voice commands understood first try) + 0.4 x (mean STT confidence) − 0.2 x (repeat rate)` | ≥3 voice command events |
 | `NAV_EFF` | mean of `min(4000ms / actionTime, 1.0)` across *understood* voice commands, scaled by the understood-rate | ≥3 voice events, at least one that completed an action |
+| `PATTERN` | correct ÷ answered, restricted to items tagged sequence/category/matching | ≥3 such items |
+| `RESIL` | `1 − HES` (interaction-only hesitation index: latency vs. baseline, answer changes, tab-blur count, mean chatbot frustration) | At least one of HES's four input signals |
+| `VIS_ENG` | mean of `0.5×(dwell≥3s) + 0.3×(card expanded) + 0.2×(diagram replayed)` across visual-summary events | ≥3 visual events |
+| `KNOW` | mean per-item concept-coverage score, each verbatim-quote verified | ≥1 scored short-answer item |
+| `EXPR` | mean per-item written-expression rubric score (organisation/completeness/mechanics) | ≥1 scored short-answer item |
 
 `VOICE_Q`/`NAV_EFF` measure **the interface**, not the student — a low
 `VOICE_Q` means the speech recognizer or intent rules failed the student, and
-is never phrased as a deficit in the learner. Three more parameters
-(`VIS_ENG`, `WRIT_EXP`, `FRUST`) are declared in the config as intended
-future signals but have no data source yet — they renormalize out
-automatically wherever a profile names them (Layer 3), costing nothing to
-declare.
+is never phrased as a deficit in the learner.
 
 #### Layer 2 — weights (per disability profile, `dase_profiles.json`)
 
 A weight is an importance multiplier: how much a parameter counts toward the
 final score for *this* profile. All 13 profiles' weights are config, not
 code — a teacher can override them per student — and are documented with a
-one-line rationale each in the file. Two examples:
+one-line rationale each in the file. Two examples (current `dase_profiles.json`):
 
 - **`default`** (no disability declared) — accuracy dominates, like an
   ordinary grade: `ACC 0.30, COMP 0.15, EFFORT 0.15, LRN_VEL 0.15, TIME_EFF
-  0.10, CONSIST 0.10, TASK_COMP 0.05`.
-- **`adhd`** — raw accuracy drops to 0.15 and `ADJ_ACC` (accuracy *after*
-  forgiving attention-lapse errors) becomes the largest term at 0.28, effort
-  is rewarded heavily at 0.22. `ATT_SPAN` is declared at 0.15 but marked
-  `diagnosticOnly` (see below) — attention span **is** the condition, so
-  scoring it would penalize the student for having ADHD.
+  0.10, PACE_STAB 0.05, ACC_STAB 0.05, TASK_COMP 0.05`.
+- **`adhd`** — raw accuracy drops to 0.1364 and `ADJ_ACC` (accuracy *after*
+  forgiving attention-lapse errors) becomes the largest term at 0.2544,
+  effort is rewarded heavily at 0.20. `ATT_SPAN` (0.1364) and `PACE_STAB`
+  (0.0228) are both declared but marked `diagnosticOnly` — attention span
+  *is* the condition, and so is inconsistent processing pace, so scoring
+  either would penalize the student for having ADHD. `ACC_STAB` (0.0227)
+  stays scorable: being reliably *accurate* from session to session is not
+  itself a symptom of ADHD.
 
 The full rationale for every profile's weights is in `dase_profiles.json`
 itself, next to the numbers.
 
 **The novelty in one sentence:** raw accuracy is worth 0.30 to a student with
-no declared disability and 0.10 to a student with dyslexia — for the
+no declared disability and 0.0909 to a student with dyslexia — for the
 dyslexic student, a wrong answer more often means "misread the question" than
 "didn't understand it", so `COMP` (comprehension on hard items) is weighted
-at 0.32 instead.
+at 0.2908 instead.
 
 #### Layer 3 — renormalization (`compute_dase()`)
 
-Weights are authored to sum to roughly 1.0, but some parameters always get
+Weights are authored to sum to exactly 1.0, but some parameters always get
 dropped for a given session — no data source that session, or marked
 `diagnosticOnly` for this profile. The survivors are rescaled to sum back to
 1.0, so a dropped parameter doesn't silently shrink the score:
@@ -342,9 +357,11 @@ dropped for a given session — no data source that session, or marked
 usedWeight[k] = weight[k] / sum(weight[j] for every scorable, measurable j)
 ```
 
-Example: ADHD declares 8 weights; `ATT_SPAN` is diagnostic-only and `FRUST`
-has no data source. Six survive, summing to 0.90 — each is divided by 0.90
-(`ADJ_ACC: 0.28 / 0.90 = 0.3111`).
+Example: ADHD declares 8 weights summing to 1.0; `ATT_SPAN` and `PACE_STAB`
+are diagnostic-only, leaving 6 scorable weights summing to 0.8636. If one of
+those six (say `RESIL`, 0.0455) also has no data this session, 5 survive,
+summing to 0.8181 — coverage is `0.8181 / 0.8636 ≈ 0.947` (94.7%), and each
+surviving weight is divided by 0.8181.
 
 #### Layer 4 — the score
 
@@ -353,26 +370,22 @@ score = sum(parameter[k] x usedWeight[k] for every usable k)
 ```
 
 A worked example — a "distracted but capable" student under the `adhd`
-profile:
+profile, with `RESIL` unmeasured this session:
 
 ```
-ACC        0.55 x 0.15  = 0.0825
-ADJ_ACC    0.82 x 0.28  = 0.2296
-EFFORT     0.60 x 0.22  = 0.1320
-TASK_COMP  0.60 x 0.10  = 0.0600
-LRN_VEL    0.55 x 0.10  = 0.0550
-CONSIST    0.30 x 0.05  = 0.0150
-                          ------
-                  sum   = 0.5741
-           / weight sum   0.90
-                          ------
-             DASE score = 0.638
+ACC        0.55 x 0.1364  = 0.0750
+ADJ_ACC    0.82 x 0.2544  = 0.2086
+EFFORT     0.60 x 0.2000  = 0.1200
+TASK_COMP  0.60 x 0.0909  = 0.0545
+LRN_VEL    0.55 x 0.0909  = 0.0500
+ACC_STAB   0.30 x 0.0227  = 0.0068
+                            ------
+                  sum     = 0.5150  (weights above already pre-divided by 0.8181)
+             DASE score   ≈ 0.638, coverage ≈ 0.947 (94.7%)
 ```
 
-The *same* raw data scored under the `default` profile instead gives 0.578 —
-same measurements, different lens, and the ADHD lens correctly rates this
-student higher because it credits knowledge that attention lapses were
-hiding rather than penalizing the lapses as if they were ignorance.
+`ATT_SPAN` and `PACE_STAB` are excluded as diagnostic-only regardless of
+whether they were measured — they never enter the sum at all.
 
 #### Supporting numbers
 
@@ -386,11 +399,35 @@ hiding rather than penalizing the lapses as if they were ignorance.
   rule: a parameter must not be scored in a profile if a *more severe* form
   of that same disability would mechanically lower it, independent of how
   much the student actually learned — scoring it would penalize the student
-  for having the condition. (`ATT_SPAN` under `adhd`, `READ_FL` under
-  `dyslexia`, `TIME_EFF` under most non-default profiles are current
-  examples.)
+  for having the condition. (`ATT_SPAN` and `PACE_STAB` under `adhd`,
+  `PACE_STAB` under `autism`, `READ_FL` under `dyslexia`, `TIME_EFF` under
+  most non-default profiles are current examples.)
 - **`missingParameters`** — which of the profile's declared parameters had no
   data this session, listed explicitly rather than silently folded away.
+
+#### Confidence intervals (U8)
+
+A 9-item quiz session is a small sample to be reporting a parameter to 2
+decimal places from. `compute_dase()`'s caller (`POST /api/evaluate`) also
+attaches:
+
+- **`parameterIntervals`** — a 95% **Wilson score interval** for every
+  parameter that is literally a `successes / n` proportion (`ACC`, `COMP`,
+  `PATTERN`, `TASK_COMP`). Wilson corrects the plain normal-approximation
+  interval's known failure at small `n` or at `p` near 0/1. A parameter that
+  isn't a simple proportion (`ADJ_ACC`, `EFFORT`, …) has no Wilson interval
+  and is simply absent from this map.
+- **`scoreInterval`** — a 95% **bootstrap** interval for the composite score
+  itself: the session's own question events are resampled with replacement
+  (500 resamples) and the full parameter set + composite score recomputed
+  each time; the interval is the 2.5th/97.5th percentile of the resulting
+  scores. This is a direct, non-parametric estimate of how much the score
+  would plausibly vary across hypothetical repeats of the same small
+  session — not a formula-based approximation.
+
+Both are shown on the teacher dashboard next to the point values they
+qualify (roster table, per-student parameter table) rather than only in the
+API response.
 
 ### 4.7 Teacher-facing aggregates
 
@@ -399,8 +436,16 @@ scoped to only the calling teacher's own roster (`teacher_id` match):
 
 - **Class average score** = mean of every scored student's latest `daseScore`
   (students with no evaluation yet are excluded, not treated as 0).
+- **Measurement-invariance warning (U1)** — `classAverageScore` pools
+  students across different disability profiles, each scored against its
+  own distinct weighting of DASE parameters; it is not a single comparable
+  measurement. Whenever the scored students span more than one distinct
+  profile, the response also carries a non-null `measurementInvarianceWarning`
+  string, and the dashboard surfaces it directly next to the pooled number
+  rather than presenting it as if it were one consistent scale.
 - **Average by primary disability** = the same mean, grouped by each
-  student's declared `primary` disability (or `"none"`).
+  student's declared `primary` disability (or `"none"`) — the comparison the
+  warning above recommends instead of the pooled figure.
 - **Average completion rate** = mean, across students who have any sessions
   at all, of `sessionsCompleted / sessionsTotal` per student.
 - **AI teaching suggestions** (`/api/analytics/recommendation`): not a

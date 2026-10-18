@@ -27,7 +27,8 @@
     "COMP": "Accuracy on higher-difficulty (comprehension) items",
     "TIME_EFF": "Response time against the student's OWN baseline, not a cohort mean",
     "ATT_SPAN": "Mean face-presence ratio. NOT gaze-on-content. Null without webcam consent",
-    "CONSIST": "1 - normalized variance of performance across same-difficulty items",
+    "PACE_STAB": "1 - coefficient of variation of response time across correct answers. Split out of the old combined CONSIST: response-time variability is itself a symptom of some disabilities (diagnosticOnly under adhd/autism), not a measure of reliability for everyone",
+    "ACC_STAB": "1 - normalized variance of correctness across recent sessions. The other half of the old combined CONSIST; never diagnosticOnly, since being reliably accurate session-to-session is not itself a symptom of any profile's disability",
     "EFFORT": "Engagement: answer changes, revisits, re-reads, time invested",
     "LRN_VEL": "Slope of correctness over the session sequence",
     "TASK_COMP": "Fraction of started sessions that were completed",
@@ -51,7 +52,8 @@
         "EFFORT": 0.15,
         "LRN_VEL": 0.15,
         "TIME_EFF": 0.1,
-        "CONSIST": 0.1,
+        "PACE_STAB": 0.05,
+        "ACC_STAB": 0.05,
         "TASK_COMP": 0.05
       }
     },
@@ -64,11 +66,13 @@
         "EFFORT": 0.2,
         "TASK_COMP": 0.0909,
         "LRN_VEL": 0.0909,
-        "CONSIST": 0.0455,
+        "PACE_STAB": 0.0228,
+        "ACC_STAB": 0.0227,
         "RESIL": 0.0455
       },
       "diagnosticOnly": [
-        "ATT_SPAN"
+        "ATT_SPAN",
+        "PACE_STAB"
       ]
     },
     "dyslexia": {
@@ -80,7 +84,8 @@
         "EFFORT": 0.1636,
         "LRN_VEL": 0.1364,
         "TIME_EFF": 0.0909,
-        "CONSIST": 0.0455,
+        "PACE_STAB": 0.0228,
+        "ACC_STAB": 0.0227,
         "RESIL": 0.0455
       },
       "diagnosticOnly": [
@@ -89,17 +94,21 @@
       ]
     },
     "autism": {
-      "rationale": "Autistic students often excel at consistency and pattern recognition. These strengths should be surfaced rather than hidden behind open-ended question failures.",
+      "rationale": "Autistic students often excel at consistency and pattern recognition. These strengths should be surfaced rather than hidden behind open-ended question failures. Response-time variability (PACE_STAB) is diagnostic-only: atypical, variable processing pace is itself a feature of autism, not a measure of unreliable performance, so scoring it would penalise the student for having the condition — the same reasoning dase_profiles.json already applies to ADHD. ATT_SPAN is not declared at all: a gaze/face-presence signal is a poor proxy for attention in an autistic student (atypical eye contact does not indicate disengagement), so the webcam focus tracker is never mounted for this profile (frontend/src/types/profile.ts) and no amount of focus data could feed this profile's score regardless.",
       "weights": {
         "ACC": 0.15,
-        "CONSIST": 0.2,
+        "PACE_STAB": 0.1,
+        "ACC_STAB": 0.1,
         "PATTERN": 0.2,
         "EFFORT": 0.1,
         "LRN_VEL": 0.1,
         "TIME_EFF": 0.1,
         "TASK_COMP": 0.1,
         "RESIL": 0.05
-      }
+      },
+      "diagnosticOnly": [
+        "PACE_STAB"
+      ]
     },
     "blind": {
       "rationale": "Voice interaction and navigation efficiency capture how effectively content is reached. Time efficiency is de-emphasized because screen-reader navigation is inherently slower. ATT_SPAN is deliberately absent — webcam attention tracking is meaningless here.",
@@ -140,7 +149,8 @@
         "COMP": 0.1765,
         "EFFORT": 0.1176,
         "LRN_VEL": 0.1176,
-        "CONSIST": 0.0588,
+        "PACE_STAB": 0.0294,
+        "ACC_STAB": 0.0294,
         "RESIL": 0.0588
       }
     },
@@ -152,7 +162,8 @@
         "VIS_ENG": 0.15,
         "EFFORT": 0.15,
         "LRN_VEL": 0.15,
-        "CONSIST": 0.1
+        "PACE_STAB": 0.05,
+        "ACC_STAB": 0.05
       }
     },
     "dyscalculia": {
@@ -162,7 +173,8 @@
         "COMP": 0.2,
         "EFFORT": 0.2,
         "LRN_VEL": 0.2,
-        "CONSIST": 0.15,
+        "PACE_STAB": 0.075,
+        "ACC_STAB": 0.075,
         "TIME_EFF": 0.05,
         "RESIL": 0.05
       },
@@ -193,7 +205,8 @@
         "EFFORT": 0.2,
         "TASK_COMP": 0.15,
         "COMP": 0.15,
-        "CONSIST": 0.05,
+        "PACE_STAB": 0.025,
+        "ACC_STAB": 0.025,
         "TIME_EFF": 0.05
       },
       "diagnosticOnly": [
@@ -207,7 +220,8 @@
         "EFFORT": 0.25,
         "LRN_VEL": 0.25,
         "TASK_COMP": 0.2,
-        "CONSIST": 0.15,
+        "PACE_STAB": 0.075,
+        "ACC_STAB": 0.075,
         "TIME_EFF": 0.05
       },
       "diagnosticOnly": [

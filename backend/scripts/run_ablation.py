@@ -122,6 +122,28 @@ ARCHETYPES: Dict[str, Dict[str, Any]] = {
 }
 
 
+def _attention_lapse_session(n_correct: int, n_lapses: int, confidence: float = 0.8) -> List[dict]:
+    """Synthetic wrong answers, fully classified, for the ADJ_ACC ablation
+    below — same construction as the deterministic unit test in
+    tests/test_dase_formulas.py, duplicated here because this script is
+    intentionally dependency-free of the test suite (it is meant to be
+    runnable standalone, including against this repo's live .env)."""
+    correct = [
+        {"type": "question", "questionId": f"q{i}", "difficulty": (i % 5) + 1, "selected": "x",
+         "correct": True, "timeMs": 5000, "answerChanges": 0, "reRead": False, "revisits": 0,
+         "focusRatio": None, "focusSamples": 0, "itemKind": "recall"}
+        for i in range(n_correct)
+    ]
+    lapses = [
+        {"type": "question", "questionId": f"q{n_correct + i}", "difficulty": (i % 5) + 1, "selected": "x",
+         "correct": False, "timeMs": 2000, "answerChanges": 0, "reRead": False, "revisits": 0,
+         "focusRatio": None, "focusSamples": 0, "itemKind": "recall",
+         "classification": {"label": "ATTENTION_LAPSE", "confidence": confidence}}
+        for i in range(n_lapses)
+    ]
+    return correct + lapses
+
+
 def run() -> None:
     cfg = d.load_config()
     profiles = list(cfg["profiles"])
@@ -185,6 +207,27 @@ def run() -> None:
         print(f"FAIL: uniformly_failing outranks struggling_but_trying under: {problems}")
     else:
         print("OK: uniformly_failing never outranks struggling_but_trying, under any profile.")
+
+    # ─── Synthetic wrong-answer ablation: ADJ_ACC, adhd vs default ───
+    # Explicitly validates how the attention-lapse-forgiveness mechanism
+    # computes and moves the score under the one profile that weights it
+    # heavily (adhd, 0.2544 — its single largest term) versus a profile
+    # that never weights it at all (default).
+    print("\n" + "=" * 100)
+    print("SYNTHETIC WRONG-ANSWER ABLATION — ADJ_ACC under adhd vs default")
+    print("=" * 100)
+    lapse_events = _attention_lapse_session(n_correct=6, n_lapses=4, confidence=0.8)
+    lapse_params = d.compute_parameters(lapse_events)
+    no_adj_acc = {k: v for k, v in lapse_params.items() if k != "ADJ_ACC"}
+    print(f"6 correct / 4 wrong, all 4 classified ATTENTION_LAPSE @ confidence 0.8")
+    print(f"  ACC     = {lapse_params['ACC']:.3f}")
+    print(f"  ADJ_ACC = {lapse_params['ADJ_ACC']:.3f}  (forgiveness credit raises it above raw ACC)")
+    for profile in ("adhd", "default"):
+        with_score = d.compute_dase(lapse_params, profile)["score"]
+        without_score = d.compute_dase(no_adj_acc, profile)["score"]
+        delta = with_score - without_score
+        print(f"  {profile:8s}: score with ADJ_ACC = {with_score:.3f}, without = {without_score:.3f}"
+              f"  (delta {delta:+.3f})")
 
 
 if __name__ == "__main__":

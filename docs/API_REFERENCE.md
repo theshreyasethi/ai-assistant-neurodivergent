@@ -434,7 +434,12 @@ and whether the DASE closed loop should re-present a simpler variant. Auth: `ver
 
 ### `POST /api/evaluate`
 Computes and persists a session's DASE score (`sessionId`, `profile`,
-`persist`). The authoritative `studentId` is the caller's own uid. Auth: `verify_user`.
+`persist`). The authoritative `studentId` is the caller's own uid. Also
+returns `parameterIntervals` (95% Wilson interval per proportion-shaped
+parameter) and `scoreInterval` (95% bootstrap interval for the composite
+score) — see
+[PROJECT_EXPLANATION.md §4.6](PROJECT_EXPLANATION.md#46-dase--the-disability-adaptive-scoring-engine).
+Auth: `verify_user`.
 
 ### `GET /api/evaluation/{student_id}`
 A student's historical DASE evaluations, newest first. Auth: `verify_user`.
@@ -456,7 +461,10 @@ student isn't on the calling teacher's roster. Auth: `verify_role("teacher")`.
 
 ### `GET /api/analytics/class`
 Class-wide aggregates: average score, average by primary disability, average
-completion rate — see [PROJECT_EXPLANATION.md §4.7](PROJECT_EXPLANATION.md#47-teacher-facing-aggregates). Auth: `verify_role("teacher")`.
+completion rate, and a `measurementInvarianceWarning` (non-null whenever the
+scored students span more than one disability profile — DASE scores are
+each profile's own weighted construct, not a shared scale) — see
+[PROJECT_EXPLANATION.md §4.7](PROJECT_EXPLANATION.md#47-teacher-facing-aggregates). Auth: `verify_role("teacher")`.
 
 ### `POST /api/analytics/recommendation`
 AI-generated teaching suggestions grounded in one student's latest DASE

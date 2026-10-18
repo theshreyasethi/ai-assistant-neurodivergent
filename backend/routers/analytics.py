@@ -87,6 +87,10 @@ async def get_roster(_user: dict = Depends(verify_role("teacher"))):
             "primary": (student.get("profile") or {}).get("primary"),
             "daseScore": latest_eval.get("score") if latest_eval else None,
             "coverage": latest_eval.get("coverage") if latest_eval else None,
+            # U8: 95% bootstrap interval for the score, computed once at
+            # evaluation time (routers/evaluation.py) and persisted — absent
+            # (None) for an evaluation computed before this field existed.
+            "scoreInterval": latest_eval.get("scoreInterval") if latest_eval else None,
             "evaluatedAt": latest_eval.get("computedAt") if latest_eval else None,
             "sessionsTotal": len(sessions),
             "sessionsCompleted": completed,
@@ -156,6 +160,26 @@ async def get_class_aggregates(_user: dict = Depends(verify_role("teacher"))):
         key = s["primary"] or "none"
         by_disability[key].append(s["daseScore"])
 
+    # Measurement-invariance warning (U1): DASE scores are each profile's OWN
+    # disability-weighted composite, not a shared, profile-agnostic scale — a
+    # blind student's score and an ADHD student's score are two different
+    # measured constructs that happen to share a 0-1 range, not two readings
+    # on the same ruler. classAverageScore below pools across profiles
+    # anyway, because a single "classroom at a glance" number is still
+    # useful, but a teacher reading it without this caveat could reasonably
+    # (and wrongly) treat it as a single comparable metric. Only fires once
+    # more than one distinct profile actually contributes a score — a class
+    # with one declared profile has nothing to conflate.
+    distinct_profiles = {k for k in by_disability if by_disability[k]}
+    measurement_invariance_warning = (
+        "classAverageScore pools students across different disability profiles, each scored "
+        "against its own distinct weighting of DASE parameters — it is not a single comparable "
+        "measurement. Prefer averageByPrimaryDisability for any comparison across students or "
+        "over time."
+        if len(distinct_profiles) > 1
+        else None
+    )
+
     return {
         "totalStudents": len(students),
         "scoredStudents": len(scored),
@@ -172,6 +196,7 @@ async def get_class_aggregates(_user: dict = Depends(verify_role("teacher"))):
                 3,
             )
         ),
+        "measurementInvarianceWarning": measurement_invariance_warning,
     }
 
 

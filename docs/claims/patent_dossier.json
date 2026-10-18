@@ -1,7 +1,7 @@
 {
   "generatedBy": "backend/scripts/build_dossier.py",
   "claimMapVersion": 1,
-  "configSha256": "e3a2d515156e0605366ba5cf591d9bdefe0828bfff84a5aac55b95852b7c3103",
+  "configSha256": "3108d613ab88829712fcf7ddb17d4462b3c27c69f0e131a341e4cb2fc36e9aaa",
   "allResolved": true,
   "claims": [
     {
@@ -43,7 +43,7 @@
           "test_detail": "1 passed",
           "evidence": {
             "config": "backend/data/dase_profiles.json",
-            "sha256": "e3a2d515156e0605366ba5cf591d9bdefe0828bfff84a5aac55b95852b7c3103"
+            "sha256": "3108d613ab88829712fcf7ddb17d4462b3c27c69f0e131a341e4cb2fc36e9aaa"
           },
           "resolved": true
         },

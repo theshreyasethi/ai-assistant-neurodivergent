@@ -110,9 +110,16 @@ export function scoringProfile(profile: Profile): string {
   return profile.primary ?? profile.disabilities[0] ?? 'default';
 }
 
-/** Webcam must be off for blind/low-vision users regardless of what's stored. */
+/** Webcam must be off for blind/low-vision users regardless of what's stored —
+ * the camera is simply useless to them. Also off for autism: a face-presence
+ * signal is a poor proxy for attention here (atypical eye contact is a
+ * feature of autism, not a sign of disengagement), so the same exclusion
+ * applies even though the camera itself would work fine. Mirrored on the
+ * backend by autism never declaring ATT_SPAN or scorable PACE_STAB in
+ * dase_profiles.json, so no stray data could feed this profile's score
+ * even if this check were somehow bypassed. */
 export function webcamAllowed(profile: Profile): boolean {
-  if (profile.disabilities.some((d) => d === 'blind' || d === 'low_vision')) return false;
+  if (profile.disabilities.some((d) => d === 'blind' || d === 'low_vision' || d === 'autism')) return false;
   return profile.prefs.webcamAttention;
 }
 

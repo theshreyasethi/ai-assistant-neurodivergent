@@ -5,7 +5,7 @@ tooling, not legal advice** — every citation below is verified against the act
 repository state at build time, but novelty, validity and claim scope are
 determinations for a registered patent attorney. See `docs/PRE_FILING_CHECKLIST.md`.
 
-Config integrity (`backend/data/dase_profiles.json`): `sha256:e3a2d515156e0605366ba5cf591d9bdefe0828bfff84a5aac55b95852b7c3103`
+Config integrity (`backend/data/dase_profiles.json`): `sha256:3108d613ab88829712fcf7ddb17d4462b3c27c69f0e131a341e4cb2fc36e9aaa`
 
 ## C1
 

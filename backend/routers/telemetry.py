@@ -82,6 +82,7 @@ def _reclassify_if_stale(session_id: str, data: dict) -> dict:
         answer_changes=data.get("answerChanges") or 0,
         time_to_first_interaction_ms=data.get("timeToFirstInteractionMs"),
         re_read=bool(data.get("reRead")),
+        item_word_count=data.get("itemWordCount") or 0,
     )
     data["classification"] = result.to_dict()
     data["classifierVersion"] = dase_engine.CLASSIFIER_VERSION

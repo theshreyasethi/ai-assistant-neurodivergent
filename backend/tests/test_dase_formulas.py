@@ -10,6 +10,8 @@ a straight-A student and a straight-F student identically, and declared
 profile weights that didn't sum to 1 or named an undefined parameter.
 """
 
+from typing import List
+
 import pytest
 
 from services import dase_engine as d
@@ -55,26 +57,75 @@ def test_adj_acc_credits_attention_lapse_by_confidence():
     assert params["ADJ_ACC"] == pytest.approx((5.0 + 0.75 * 0.8) / 6, abs=1e-6)
 
 
-# ─────────────────────── CONSIST (P3-06) ───────────────────────
+def _synthetic_wrong_answers(n_correct: int, n_attention_lapse: int, *, confidence: float = 0.8) -> List[dict]:
+    """A synthetic session with explicit, fully-classified wrong answers — the
+    scoring-ablation case roadmap requested for comparing ADJ_ACC's effect
+    across profiles. 100% classifier coverage, well above the 80% floor
+    _adj_acc() requires before it will compute at all."""
+    correct = [ev(i, True) for i in range(n_correct)]
+    lapses = [
+        ev(n_correct + i, False, classification={"label": "ATTENTION_LAPSE", "confidence": confidence})
+        for i in range(n_attention_lapse)
+    ]
+    return correct + lapses
 
 
-def test_consist_does_not_reward_uniform_failure():
-    """Audit finding: 1 - 4p(1-p) scored a student who missed every single
-    question a perfect 1.0 — uniform FAILURE is not the same thing as
-    consistency, and the old formula could not tell them apart."""
-    all_wrong = [ev(i, False, t=5000 + i * 10) for i in range(8)]
-    assert d.compute_parameters(all_wrong).get("CONSIST", 0.0) < 0.5
+def test_adj_acc_raises_the_adhd_score_but_is_irrelevant_to_default():
+    """Explicitly validates how ADJ_ACC computes and affects scores under
+    the ADHD profile compared to default (the scoring-ablation extension
+    roadmap requested): ADHD weights ADJ_ACC as its single largest term
+    (0.2544) specifically to forgive attention-lapse-classified wrong
+    answers; default never declares ADJ_ACC at all, so the same forgiveness
+    has zero effect there."""
+    events = _synthetic_wrong_answers(n_correct=6, n_attention_lapse=4, confidence=0.8)
+    params = d.compute_parameters(events)
+    assert params["ACC"] == pytest.approx(0.6, abs=1e-6)
+    assert params["ADJ_ACC"] > params["ACC"]  # attention-lapse credit raises it above raw accuracy
+
+    without_adj_acc = {k: v for k, v in params.items() if k != "ADJ_ACC"}
+
+    adhd_with = d.compute_dase(params, "adhd")["score"]
+    adhd_without = d.compute_dase(without_adj_acc, "adhd")["score"]
+    assert adhd_with > adhd_without  # ADHD's own largest weight is ADJ_ACC — removing it must lower the score
+
+    default_with = d.compute_dase(params, "default")["score"]
+    default_without = d.compute_dase(without_adj_acc, "default")["score"]
+    assert default_with == pytest.approx(default_without, abs=1e-9)  # default never weights ADJ_ACC at all
 
 
-def test_consist_rewards_steady_correct_pace():
+# ─────────────── PACE_STAB / ACC_STAB (P3-06, split from CONSIST) ───────────────
+# CONSIST used to blend response-time stability with cross-session accuracy
+# stability into one number. They're split into two separate parameters so
+# that pace (diagnostic-only under adhd/autism — see dase_profiles.json) can
+# be excluded from those profiles' scores independently of accuracy
+# stability, which is never diagnostic-only for anyone.
+
+
+def test_pace_stability_rewards_steady_correct_pace():
     steady = [ev(i, True, t=5000) for i in range(6)]
-    assert d.compute_parameters(steady)["CONSIST"] == pytest.approx(1.0, abs=1e-6)
+    assert d.compute_parameters(steady)["PACE_STAB"] == pytest.approx(1.0, abs=1e-6)
 
 
-def test_consist_penalises_erratic_pace():
+def test_pace_stability_penalises_erratic_pace():
     erratic = [ev(i, True, t=t) for i, t in enumerate([1000, 9000, 500, 12000, 800, 15000])]
     steady = [ev(i, True, t=5000) for i in range(6)]
-    assert d.compute_parameters(erratic)["CONSIST"] < d.compute_parameters(steady)["CONSIST"]
+    assert d.compute_parameters(erratic)["PACE_STAB"] < d.compute_parameters(steady)["PACE_STAB"]
+
+
+def test_accuracy_stability_is_independent_of_accuracy_level():
+    """A student reliably scoring 0% across sessions is exactly as
+    'consistent' as one reliably scoring 90% — ACC_STAB measures variance
+    across sessions, never the level itself (that's ACC's job)."""
+    reliably_zero = d._accuracy_stability([0.0, 0.0, 0.0])
+    reliably_high = d._accuracy_stability([0.9, 0.9, 0.9])
+    assert reliably_zero == pytest.approx(1.0, abs=1e-6)
+    assert reliably_high == pytest.approx(1.0, abs=1e-6)
+
+
+def test_accuracy_stability_penalises_session_to_session_swings():
+    erratic = d._accuracy_stability([0.0, 1.0, 0.0])
+    steady = d._accuracy_stability([0.5, 0.5, 0.5])
+    assert erratic < steady
 
 
 # ─────────────────────── TIME_EFF (P3-06) ───────────────────────
@@ -213,8 +264,8 @@ def test_every_weighted_parameter_is_defined():
 
 
 def test_composite_is_monotonic_in_accuracy_when_all_else_equal():
-    low = d.compute_dase({"ACC": 0.3, "EFFORT": 0.7, "LRN_VEL": 0.7, "TIME_EFF": 0.7, "CONSIST": 0.7, "COMP": 0.7, "TASK_COMP": 0.7}, "default")
-    high = d.compute_dase({"ACC": 0.9, "EFFORT": 0.7, "LRN_VEL": 0.7, "TIME_EFF": 0.7, "CONSIST": 0.7, "COMP": 0.7, "TASK_COMP": 0.7}, "default")
+    low = d.compute_dase({"ACC": 0.3, "EFFORT": 0.7, "LRN_VEL": 0.7, "TIME_EFF": 0.7, "PACE_STAB": 0.7, "ACC_STAB": 0.7, "COMP": 0.7, "TASK_COMP": 0.7}, "default")
+    high = d.compute_dase({"ACC": 0.9, "EFFORT": 0.7, "LRN_VEL": 0.7, "TIME_EFF": 0.7, "PACE_STAB": 0.7, "ACC_STAB": 0.7, "COMP": 0.7, "TASK_COMP": 0.7}, "default")
     assert high["score"] > low["score"]
 
 
@@ -227,6 +278,50 @@ def test_override_weights_replace_profile_defaults_but_keep_diagnostic_rule():
     assert "ATT_SPAN" not in override_result["usedWeights"]
     assert override_result["score"] == pytest.approx(1.0, abs=1e-6)
     assert default_result["score"] == pytest.approx(1.0, abs=1e-6)
+
+
+# ─────────────────────── confidence intervals (U8) ───────────────────────
+
+
+def test_wilson_interval_widens_as_n_shrinks_for_the_same_proportion():
+    """The whole point of reporting an interval for a 9-item session: the
+    SAME observed proportion (2/3) should report a much wider interval at
+    n=3 than the same 2/3 ratio scaled up to n=300."""
+    small = d.wilson_interval(2, 3)
+    large = d.wilson_interval(200, 300)
+    assert (small[1] - small[0]) > (large[1] - large[0])
+
+
+def test_wilson_interval_is_maximally_uninformative_at_n_zero():
+    assert d.wilson_interval(0, 0) == (0.0, 1.0)
+
+
+def test_wilson_interval_bounds_never_escape_zero_one():
+    lo, hi = d.wilson_interval(9, 9)  # a perfect small sample
+    assert 0.0 <= lo <= hi <= 1.0
+
+
+def test_parameter_intervals_match_the_n_behind_each_point_estimate():
+    events = [ev(i, i < 6) for i in range(9)]  # 6/9 correct, difficulty=3 (>=3 -> also COMP-eligible)
+    params = d.compute_parameters(events)
+    intervals = d.parameter_intervals(events)
+    assert set(intervals) == {"ACC", "COMP"}  # no itemKind data -> PATTERN absent, no sessions -> TASK_COMP absent
+    for name in ("ACC", "COMP"):
+        lo, hi = intervals[name]
+        assert lo <= params[name] <= hi
+
+
+def test_bootstrap_score_interval_contains_the_point_estimate_and_has_positive_width():
+    events = [ev(i, i < 6) for i in range(9)]
+    params = d.compute_parameters(events)
+    point_score = d.compute_dase(params, "default")["score"]
+    lo, hi = d.bootstrap_score_interval(events, profile="default", n_resamples=300, seed=7)
+    assert lo <= point_score <= hi
+    assert hi > lo  # a mixed 6/9 session must not collapse to a zero-width interval
+
+
+def test_bootstrap_score_interval_is_none_with_no_question_events():
+    assert d.bootstrap_score_interval([], profile="default") is None
 
 
 def test_config_sha256_and_version_are_stable_and_present():

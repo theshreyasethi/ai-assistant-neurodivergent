@@ -98,6 +98,36 @@ def test_thin_baseline_caps_confidence_even_on_a_clear_processing_delay():
     assert c_thin.confidence <= c_rich.confidence
 
 
+# ─────────────── item-length normalization (G10) ───────────────
+# A long item's stem + options simply take longer to READ, independent of
+# hesitation or attention — without subtracting an estimated reading-time
+# floor first, a long item could read as a processing delay purely because
+# reading it took a while, never because the student was actually slow
+# relative to their own baseline.
+
+
+def test_long_time_without_word_count_reads_as_processing_delay():
+    """Baseline for the next test: the exact same raw time, with no item
+    length supplied (item_word_count defaults to 0, i.e. no adjustment —
+    identical to this classifier's behaviour before G10)."""
+    c = d.classify_error(time_ms=11000, prior_times_ms=BASELINE_TIMES)
+    assert c.label == d.PROCESSING_DELAY
+
+
+def test_item_word_count_normalizes_away_a_false_processing_delay():
+    """Same raw time (11000ms) and the same baseline as the test above, but
+    this item's stem + options are 30 words long — a ~9000ms reading floor
+    at 300ms/word. Once that's subtracted, the student's actual (post-
+    reading) response time is 2000ms, a FAST answer relative to their
+    5000ms baseline, not a slow one — the opposite classification from the
+    unadjusted case, which is exactly the false positive G10 exists to fix."""
+    c = d.classify_error(time_ms=11000, prior_times_ms=BASELINE_TIMES, item_word_count=30)
+    assert c.label != d.PROCESSING_DELAY
+    assert c.signals["itemWordCount"] == 30
+    assert c.signals["readingFloorMs"] == 9000
+    assert c.signals["adjustedTimeMs"] == 2000
+
+
 def test_should_represent_true_only_for_confident_comprehension_barrier():
     confident = d.Classification(d.COMPREHENSION_BARRIER, 0.6)
     weak = d.Classification(d.COMPREHENSION_BARRIER, 0.2)

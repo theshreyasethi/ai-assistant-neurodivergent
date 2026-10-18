@@ -19,7 +19,7 @@ from services import baselines, dase_engine
 router = APIRouter()
 
 # Sessions scanned for TASK_COMP (completed ÷ started) and for the
-# cross-session CONSIST accuracy-stability input — a window, not the
+# cross-session ACC_STAB accuracy-stability input — a window, not the
 # student's whole history, so a score reflects recent behaviour.
 RECENT_SESSIONS_WINDOW = 20
 
@@ -34,6 +34,9 @@ class ClassifyRequest(BaseModel):
     reRead: bool = False
     timedOut: bool = False
     hasSimplerVariant: bool = False
+    # G10: word count of this item's stem + options, so a long item's extra
+    # reading time is never mistaken for hesitation (dase_engine.classify_error).
+    itemWordCount: int = 0
 
 
 @router.post("/classify")
@@ -53,6 +56,7 @@ async def classify(req: ClassifyRequest, _user: dict = Depends(require_active_us
         time_to_first_interaction_ms=req.timeToFirstInteractionMs,
         re_read=req.reRead,
         timed_out=req.timedOut,
+        item_word_count=req.itemWordCount,
     )
     return {
         "classification": result.to_dict(),
@@ -174,6 +178,19 @@ async def evaluate(req: EvaluateRequest, _user: dict = Depends(require_active_us
     result["errorBreakdown"] = dase_engine.error_breakdown(questions)
     result["sessionId"] = req.sessionId
     result["studentId"] = student_id
+    # U8: 95% confidence bounds — Wilson for each proportion-shaped
+    # parameter, a bootstrap resample of this session's own question events
+    # for the composite score. A 9-item session is a small sample; these
+    # make that explicit rather than implying false precision.
+    result["parameterIntervals"] = {
+        k: list(v) for k, v in dase_engine.parameter_intervals(questions, sessions).items()
+    }
+    score_interval = dase_engine.bootstrap_score_interval(
+        questions, readings, sessions, voices, visual_events=visuals,
+        baseline_ms=baseline, chat_frustration=chat_frustration,
+        profile=profile, override_weights=override_weights,
+    )
+    result["scoreInterval"] = list(score_interval) if score_interval else None
     # configVersion/configSha256 (roadmap P3-10): so a score can be
     # reproduced later from (events, configSha256) even after the weights
     # file has since changed.

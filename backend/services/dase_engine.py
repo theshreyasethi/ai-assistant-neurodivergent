@@ -27,10 +27,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import random
 import statistics
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from services import hesitation
 
@@ -46,7 +47,17 @@ MIN_FOCUS_SAMPLES = 5
 # already-stored events. routers/telemetry.py re-classifies on ingest whenever
 # a stored event's classifierVersion doesn't match this, so a formula change
 # propagates to fresh data without a backfill migration.
-CLASSIFIER_VERSION = "3.6"
+CLASSIFIER_VERSION = "3.7"
+
+# Item-length normalization (G10): a longer question stem + options simply
+# takes longer to READ, independent of hesitation or attention — without
+# this, a long item could push ratio past the ATTENTION_LAPSE/
+# COMPREHENSION_BARRIER/PROCESSING_DELAY thresholds purely because reading
+# it took longer, never because the student was actually fast or slow
+# relative to their own baseline. 300ms/word is a literature-informed,
+# UNVALIDATED estimate (~200 wpm, an average reading pace) — tune in the
+# pilot, same as the other unvalidated timing constants in this codebase.
+_READING_MS_PER_WORD = 300
 
 KNOWLEDGE_GAP = "KNOWLEDGE_GAP"
 ATTENTION_LAPSE = "ATTENTION_LAPSE"
@@ -130,6 +141,32 @@ def rolling_median(times: Sequence[float]) -> Optional[float]:
     return statistics.median(usable)
 
 
+# ─────────────────────── confidence intervals (U8) ───────────────────────
+# A 9-item quiz session is a very small sample to be reporting a parameter
+# to 2 decimal places from — these intervals exist so a teacher sees that
+# uncertainty explicitly rather than reading, say, ACC=0.67 as a precise
+# measurement of a 9-item session (6/9 correct), when the true underlying
+# accuracy could plausibly be anywhere from roughly 0.35 to 0.88.
+
+_Z_95 = 1.959963984540054  # two-sided 95% normal quantile
+
+
+def wilson_interval(successes: int, n: int, z: float = _Z_95) -> Tuple[float, float]:
+    """Wilson score interval for a proportion successes/n — the standard
+    correction for the plain normal-approximation interval's known failure
+    at small n or at p near 0/1 (where that interval can extend below 0 or
+    above 1, or collapse to zero width at p=0 or p=1 despite n being tiny).
+    n=0 returns the maximally uninformative (0.0, 1.0): no data, no claim.
+    """
+    if n <= 0:
+        return (0.0, 1.0)
+    p = successes / n
+    denom = 1.0 + (z * z) / n
+    center = (p + (z * z) / (2 * n)) / denom
+    margin = (z * ((p * (1 - p) / n + (z * z) / (4 * n * n)) ** 0.5)) / denom
+    return (_clamp(center - margin), _clamp(center + margin))
+
+
 def classify_error(
     *,
     time_ms: int,
@@ -140,11 +177,22 @@ def classify_error(
     time_to_first_interaction_ms: Optional[int] = None,
     re_read: bool = False,
     timed_out: bool = False,
+    item_word_count: int = 0,
 ) -> Classification:
     """Classify a single WRONG answer by probable cause.
 
     Only ever called on incorrect answers — a correct answer has no error to explain.
+
+    `item_word_count` (G10) is the word count of this item's stem + options —
+    its estimated reading-time floor is subtracted from `time_ms` before any
+    ratio-against-baseline comparison, so a long item's extra, unavoidable
+    reading time is never mistaken for hesitation or disengagement. 0 (the
+    default, for events recorded before this field existed) applies no
+    adjustment, which is the same behaviour this classifier always had.
     """
+    reading_floor_ms = max(item_word_count, 0) * _READING_MS_PER_WORD
+    adjusted_time_ms = max(time_ms - reading_floor_ms, 1.0) if reading_floor_ms else time_ms
+
     baseline = rolling_median(prior_times_ms)
     n_prior = len([t for t in prior_times_ms if t and t > 0])
 
@@ -167,6 +215,9 @@ def classify_error(
 
     signals: Dict[str, Any] = {
         "timeMs": time_ms,
+        "itemWordCount": item_word_count,
+        "readingFloorMs": round(reading_floor_ms) if reading_floor_ms else 0,
+        "adjustedTimeMs": round(adjusted_time_ms) if reading_floor_ms else time_ms,
         "baselineMs": round(baseline) if baseline else None,
         "priorSamples": n_prior,
         "focusRatio": focus_ratio,
@@ -176,7 +227,7 @@ def classify_error(
         "timeToFirstInteractionMs": time_to_first_interaction_ms,
     }
 
-    ratio = (time_ms / baseline) if baseline else None
+    ratio = (adjusted_time_ms / baseline) if baseline else None
     if ratio is not None:
         signals["timeRatio"] = round(ratio, 2)
 
@@ -355,24 +406,37 @@ def _adj_acc(answered: List[dict]) -> Optional[float]:
     return total / len(answered)
 
 
-def _consist(correct_times_ms: List[float], per_session_acc: List[float]) -> Optional[float]:
-    """Pace stability (coefficient of variation of correct-answer times) blended
-    with cross-session accuracy stability — replaces 1-4p(1-p), which scored a
-    student who missed every single question a perfect 1.0 (uniform failure is
-    not consistency; it is the opposite of what this parameter claims to measure).
-    Independent of accuracy LEVEL: a student who is reliably at 40% is exactly
-    as "consistent" as one reliably at 90%.
+def _pace_stability(correct_times_ms: List[float]) -> Optional[float]:
+    """Coefficient of variation of correct-answer response times. Split out of
+    the old combined CONSIST (which blended this with cross-session accuracy
+    stability below) because response-time variability is, for some
+    disabilities, a symptom of the condition itself rather than a measure of
+    how reliably the student performs — ADHD and autism mark this
+    diagnostic-only (dase_profiles.json) for exactly that reason. Independent
+    of accuracy LEVEL: a student answering reliably but slowly-and-erratically
+    scores the same as one answering reliably-and-erratically at any other pace.
     """
-    parts: List[float] = []
-    if len(correct_times_ms) >= 4:
-        mean_t = statistics.fmean(correct_times_ms)
-        cv = statistics.pstdev(correct_times_ms) / mean_t if mean_t else 1.0
-        parts.append(1.0 - min(cv, 1.0))
-    if len(per_session_acc) >= 3:
-        # pstdev of values in [0,1] maxes at 0.5 (half 0s, half 1s), so that's
-        # the natural scale to normalize against.
-        parts.append(1.0 - min(statistics.pstdev(per_session_acc) / 0.5, 1.0))
-    return statistics.fmean(parts) if parts else None
+    if len(correct_times_ms) < 4:
+        return None
+    mean_t = statistics.fmean(correct_times_ms)
+    cv = statistics.pstdev(correct_times_ms) / mean_t if mean_t else 1.0
+    return 1.0 - min(cv, 1.0)
+
+
+def _accuracy_stability(per_session_acc: List[float]) -> Optional[float]:
+    """Cross-session consistency of correctness — replaces the old 1-4p(1-p),
+    which scored a student who missed every single question a perfect 1.0
+    (uniform failure is not consistency; it is the opposite of what this
+    parameter claims to measure). Independent of accuracy LEVEL: a student
+    who is reliably at 40% is exactly as "consistent" as one reliably at 90%.
+    Never diagnostic-only — unlike pace, being reliably accurate from session
+    to session is not itself a symptom of any profile's disability.
+    """
+    if len(per_session_acc) < 3:
+        return None
+    # pstdev of values in [0,1] maxes at 0.5 (half 0s, half 1s), so that's
+    # the natural scale to normalize against.
+    return 1.0 - min(statistics.pstdev(per_session_acc) / 0.5, 1.0)
 
 
 def _time_eff(answered: List[dict], baseline_ms: Optional[float]) -> Optional[float]:
@@ -588,9 +652,12 @@ def compute_parameters(
         for s in sessions
         if (s.get("summary") or {}).get("totalQuestions")
     ]
-    consist = _consist(correct_times, per_session_acc)
-    if consist is not None:
-        params["CONSIST"] = consist
+    pace_stab = _pace_stability(correct_times)
+    if pace_stab is not None:
+        params["PACE_STAB"] = pace_stab
+    acc_stab = _accuracy_stability(per_session_acc)
+    if acc_stab is not None:
+        params["ACC_STAB"] = acc_stab
 
     # ── EFFORT: engagement signals, independent of whether the answer was right.
     session_median = rolling_median([e.get("timeMs") for e in answered if e.get("timeMs")])
@@ -637,6 +704,98 @@ def compute_parameters(
             params["READ_FL"] = _clamp((_safe_mean(wpms) or 0.0) / 200.0)
 
     return params
+
+
+def parameter_intervals(
+    question_events: List[dict], sessions: Optional[List[dict]] = None,
+) -> Dict[str, Tuple[float, float]]:
+    """Wilson 95% confidence interval for every DASE parameter that is
+    literally a successes/n proportion (ACC, COMP, PATTERN, TASK_COMP) —
+    recomputed from the same raw events using the identical filtering
+    compute_parameters() uses for each, so the n behind an interval always
+    matches the n behind that parameter's own point estimate. Parameters
+    that are not simple proportions (ADJ_ACC's confidence-weighted credit,
+    EFFORT's blended sub-signals, etc.) have no Wilson interval and are
+    simply absent from the result — reporting one for them would imply a
+    precision the math doesn't support.
+    """
+    sessions = sessions or []
+    question_events = [e for e in question_events if not e.get("degraded")]
+    answered = [e for e in question_events if e.get("selected") is not None or e.get("correct")]
+
+    intervals: Dict[str, Tuple[float, float]] = {}
+    if answered:
+        correct = [bool(e.get("correct")) for e in answered]
+        intervals["ACC"] = wilson_interval(sum(correct), len(answered))
+
+        hard = [e for e in answered if (e.get("difficulty") or 3) >= 3]
+        if len(hard) >= 3:
+            intervals["COMP"] = wilson_interval(sum(bool(e.get("correct")) for e in hard), len(hard))
+
+        pattern_items = [e for e in answered if e.get("itemKind") in _PATTERN_ITEM_KINDS]
+        if len(pattern_items) >= MIN_PATTERN_ITEMS:
+            intervals["PATTERN"] = wilson_interval(
+                sum(bool(e.get("correct")) for e in pattern_items), len(pattern_items)
+            )
+
+    if sessions:
+        completed = sum(1 for s in sessions if (s.get("summary") or {}).get("completed"))
+        intervals["TASK_COMP"] = wilson_interval(completed, len(sessions))
+
+    return intervals
+
+
+def bootstrap_score_interval(
+    question_events: List[dict],
+    reading_events: Optional[List[dict]] = None,
+    sessions: Optional[List[dict]] = None,
+    voice_events: Optional[List[dict]] = None,
+    visual_events: Optional[List[dict]] = None,
+    baseline_ms: Optional[float] = None,
+    chat_frustration: Optional[float] = None,
+    profile: str = "default",
+    override_weights: Optional[Dict[str, float]] = None,
+    n_resamples: int = 500,
+    seed: Optional[int] = None,
+) -> Optional[Tuple[float, float]]:
+    """95% bootstrap confidence interval for the composite DASE score, by
+    resampling the session's own question events WITH REPLACEMENT and
+    recomputing the full parameter set + composite score each time — a
+    direct, non-parametric estimate of how much the score would plausibly
+    vary across hypothetical repeats of the same small session, rather
+    than a formula-based approximation. Reading/voice/visual events and
+    cross-session inputs (sessions, baseline_ms, chat_frustration) are held
+    fixed across resamples: they are themselves already aggregates, not a
+    single session's per-item sample, so resampling them would not estimate
+    the same kind of uncertainty.
+
+    Returns None when there are no question events at all to resample, or
+    when every resample fails to produce a usable score for this profile
+    (e.g. a profile whose only declared parameters never have question-level
+    data at all, such as a pure voice/reading signal set).
+    """
+    clean_events = [e for e in question_events if not e.get("degraded")]
+    if not clean_events:
+        return None
+
+    rng = random.Random(seed)
+    scores: List[float] = []
+    for _ in range(max(1, n_resamples)):
+        resample = [rng.choice(clean_events) for _ in clean_events]
+        params = compute_parameters(
+            resample, reading_events, sessions, voice_events, visual_events,
+            baseline_ms, chat_frustration,
+        )
+        result = compute_dase(params, profile, override_weights)
+        if result["score"] is not None:
+            scores.append(result["score"])
+
+    if not scores:
+        return None
+    scores.sort()
+    lo_idx = max(0, int(round(0.025 * (len(scores) - 1))))
+    hi_idx = min(len(scores) - 1, int(round(0.975 * (len(scores) - 1))))
+    return (round(scores[lo_idx], 4), round(scores[hi_idx], 4))
 
 
 # ─────────────────────── scoring ───────────────────────

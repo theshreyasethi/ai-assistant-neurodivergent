@@ -36,6 +36,12 @@ export interface QuestionEvent {
   /** Autism/PATTERN (roadmap P3-07): sequence/category/matching tag from
    * the quiz generator. null for older or spaCy-fallback items. */
   itemKind: string | null;
+  /** G10 — word count of this item's stem + options, so the backend error
+   * classifier (dase_engine.classify_error) can subtract an estimated
+   * reading-time floor before judging hesitation. A long item otherwise
+   * takes longer to simply read, which must never be mistaken for slow or
+   * attentive-seeming behaviour relative to the student's own baseline. */
+  itemWordCount: number;
   selected: string | null;
   correct: boolean;
   timeMs: number;

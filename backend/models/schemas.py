@@ -105,6 +105,12 @@ class QuestionEvent(EventBase):
     # Autism/PATTERN (roadmap P3-07): sequence/category/matching items tagged
     # by services/quiz_gen.py. None for older or spaCy-fallback items.
     itemKind: Optional[str] = None
+    # G10: word count of this item's stem + options, so dase_engine's error
+    # classifier can subtract an estimated reading-time floor before judging
+    # hesitation — a long item's extra reading time is otherwise easy to
+    # misread as slow/attentive-seeming behaviour. 0 for events recorded
+    # before this field existed, which classify_error treats as "no adjustment".
+    itemWordCount: int = 0
 
     selected: Optional[str] = None
     correct: bool

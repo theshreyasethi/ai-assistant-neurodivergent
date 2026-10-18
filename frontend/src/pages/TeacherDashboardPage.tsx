@@ -12,6 +12,10 @@ interface ClassAggregates {
   classAverageScore: number | null;
   averageByPrimaryDisability: Record<string, number>;
   averageCompletionRate: number | null;
+  /** Non-null only when scored students span more than one disability
+   * profile — each profile scores against its own distinct DASE weighting,
+   * so classAverageScore pools different measured constructs together. */
+  measurementInvarianceWarning: string | null;
 }
 
 interface StudentDetail {
@@ -127,6 +131,11 @@ const TeacherDashboardPage: React.FC = () => {
                     {classAgg.scoredStudents}/{classAgg.totalStudents} scored
                   </p>
                 )}
+                {classAgg?.measurementInvarianceWarning && (
+                  <p className="text-[10px] opacity-90 mt-1 max-w-[180px] leading-snug" role="note">
+                    ⚠ Pools different disability profiles — see breakdown below
+                  </p>
+                )}
               </div>
               <div className="bg-white/20 backdrop-blur-md rounded-2xl p-4 border border-white/30 text-center min-w-[150px]">
                 <p className="font-heading text-xs font-semibold uppercase tracking-wider opacity-80">Avg. completion</p>
@@ -140,9 +149,18 @@ const TeacherDashboardPage: React.FC = () => {
 
         {classAgg && Object.keys(classAgg.averageByPrimaryDisability).length > 0 && (
           <div className="glass-card rounded-3xl p-6">
-            <h3 className="font-heading text-xs font-semibold text-on-surface-variant uppercase tracking-widest mb-3">
+            <h3 className="font-heading text-xs font-semibold text-on-surface-variant uppercase tracking-widest mb-1">
               Average DASE score by primary profile
             </h3>
+            {classAgg.measurementInvarianceWarning ? (
+              <p className="text-xs text-on-surface-variant font-body mb-3" role="note">
+                {classAgg.measurementInvarianceWarning}
+              </p>
+            ) : (
+              <p className="text-xs text-on-surface-variant font-body mb-3">
+                Each profile scores against its own DASE weighting — compare within a profile, not across them.
+              </p>
+            )}
             <div className="flex flex-wrap gap-3">
               {Object.entries(classAgg.averageByPrimaryDisability).map(([profile, avg]) => (
                 <span key={profile} className="text-xs font-body bg-surface-container-low px-3 py-1.5 rounded-full">

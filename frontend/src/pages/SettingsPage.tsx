@@ -62,7 +62,12 @@ const SettingsPage: React.FC = () => {
   };
 
   const isBlindOrLowVision = profile.disabilities.some((d) => d === 'blind' || d === 'low_vision');
-  const webcamOffered = !isBlindOrLowVision;
+  // Mirrors webcamAllowed() (types/profile.ts): autism is excluded from the
+  // webcam toggle for the same reason blind/low-vision is, just a different
+  // one — face-presence is a poor proxy for attention when atypical eye
+  // contact is itself a feature of the condition, not disengagement.
+  const isAutism = profile.disabilities.includes('autism');
+  const webcamOffered = !isBlindOrLowVision && !isAutism;
 
   if (loading) {
     return (

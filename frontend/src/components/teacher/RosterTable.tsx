@@ -8,6 +8,9 @@ export interface RosterEntry {
   primary: string | null;
   daseScore: number | null;
   coverage: number | null;
+  /** 95% bootstrap interval [lo, hi] (routers/evaluation.py); null for an
+   * evaluation computed before this field existed. */
+  scoreInterval: [number, number] | null;
   evaluatedAt: unknown;
   sessionsTotal: number;
   sessionsCompleted: number;
@@ -119,9 +122,16 @@ const RosterTable: React.FC<Props> = ({ students, selectedId, onSelect }) => {
                   <td className="px-6 py-4 text-sm text-on-surface-variant">{s.primary ? s.primary.replace(/_/g, ' ') : '—'}</td>
                   <td className="px-6 py-4 text-sm">
                     {s.daseScore != null ? (
-                      <span className="font-heading font-semibold text-primary">
-                        {Math.round(s.daseScore * 100)}% · coverage {Math.round((s.coverage ?? 0) * 100)}%
-                      </span>
+                      <>
+                        <span className="font-heading font-semibold text-primary">
+                          {Math.round(s.daseScore * 100)}% · coverage {Math.round((s.coverage ?? 0) * 100)}%
+                        </span>
+                        {s.scoreInterval && (
+                          <span className="block text-[11px] text-on-surface-variant font-body">
+                            95% CI: {Math.round(s.scoreInterval[0] * 100)}%–{Math.round(s.scoreInterval[1] * 100)}%
+                          </span>
+                        )}
+                      </>
                     ) : (
                       <span className="text-on-surface-variant text-xs">Not yet scored</span>
                     )}
